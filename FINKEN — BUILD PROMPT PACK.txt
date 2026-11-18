@@ -1,0 +1,1433 @@
+# Finken — BUILD PROMPT PACK
+
+## GLOBAL BUILD PRINCIPLES
+
+These instructions govern the entire project. Preserve them throughout all subsequent prompts.
+
+### Product identity
+
+Build **Finken**, a personal and small-business financial management application.
+
+- Brand tagline: **Your Money, Made Simple.**
+- Product positioning: **Know your money. Manage your money.**
+- Core philosophy: **Simple on the surface. Intelligent underneath.**
+- Product category: Personal and Small Business Financial Management.
+- Currency default: PKR (Rs.), configurable for other currencies.
+- Primary market context: Pakistan, but the product should be internationally adaptable.
+
+Finken is NOT traditional accounting software. It is a friendly, intelligent financial companion.
+
+Its product philosophy is:
+
+**Capture → Organize → Understand → Plan → Act → Improve**
+
+The application should help users answer:
+
+1. Where is my money?
+2. Where is it going?
+3. What's coming up?
+4. What can I afford?
+5. What should I do next?
+
+### Target users
+
+Support two primary contexts:
+
+**Personal**
+- Individuals and families.
+- Income and expenses.
+- Household budgets.
+- Savings goals.
+- Loans and money owed.
+- Bills and recurring payments.
+- Shared expenses.
+
+**Business**
+- Freelancers, entrepreneurs and small businesses.
+- Business income and expenses.
+- Customers and suppliers.
+- Receivables and payables.
+- Business budgets.
+- Cash flow and basic profit and loss.
+- Business reports.
+
+Both contexts must use the same underlying Money Engine.
+
+### Spaces architecture
+
+Use Spaces to separate financial environments.
+
+Examples:
+- Personal
+- Family
+- Business
+- Car
+- Side Business
+- Company A
+
+Every Space has its own transactions, categories, budgets, goals, people, loans, receivables, payables and financial insights.
+
+Users can switch between Spaces without creating separate Finken accounts.
+
+### Important product boundaries
+
+Do not turn Finken into:
+- A complex accounting system.
+- An ERP.
+- An inventory management system.
+- A payroll system.
+- A tax management system.
+- An investment or cryptocurrency platform.
+
+Avoid complex accounting terminology and unnecessary data entry.
+
+### Technical principles
+
+- Build a responsive web application, optimised for both mobile and desktop.
+- Use React and TypeScript.
+- Use reusable components and a modular folder structure.
+- Use Tailwind CSS or an equivalent consistent styling system.
+- Use a clean data-access layer separating UI components from business logic and storage.
+- Use browser persistence for the prototype, preferably IndexedDB or an appropriate local persistence solution.
+- Provide realistic seeded demo data.
+- Make all primary interactions functional.
+- Ensure data remains available after refreshing the browser.
+- Avoid unnecessary external API dependencies.
+- Do not require real banking, payment gateway or third-party integrations.
+- Use mock authentication for the prototype, without pretending that it is production-secure.
+- Keep the architecture ready for a future Firebase or other backend implementation.
+- Never hardcode financial calculations separately in different screens. Use shared business logic.
+- Do not replace existing working functionality when adding a new feature.
+
+### Functional expectations
+
+Every button, form, navigation item, filter, modal, dropdown and action must work.
+
+Do not create decorative controls that appear functional but do nothing.
+
+Use realistic empty states, loading states, confirmation messages, validation and error messages.
+
+Financial calculations must be internally consistent.
+
+If an action affects money, balances, budgets, receivables or payables, ensure all relevant views update accordingly.
+
+### Design direction
+
+Create a premium, modern FinTech + Productivity experience.
+
+The interface should feel:
+- Simple.
+- Friendly.
+- Trustworthy.
+- Modern.
+- Calm.
+- Intelligent.
+
+Use:
+- Clean typography.
+- Generous spacing.
+- Rounded cards.
+- Subtle borders and shadows.
+- Restrained gradient accents.
+- Clear financial numbers.
+- Simple icons.
+- Attractive but readable charts.
+- Subtle transitions and micro-interactions.
+
+Avoid:
+- Traditional accounting software layouts.
+- Excessive tables.
+- Too many colours.
+- Overcrowded dashboards.
+- Unnecessary gradients.
+- Excessive animations.
+- Complicated navigation.
+
+Do not make the logo a literal coin, wallet, calculator or rupee symbol. Use a clean typographic Finken wordmark initially. Do not invent a final logo identity.
+
+---
+
+# PROMPT 0 — CREATE THE Finken APPLICATION FOUNDATION
+
+Build the initial Finken web application based on the complete product requirements below.
+
+This is the foundation of a larger application that will be expanded through subsequent prompts. Do not attempt to implement every feature in this first step.
+
+Create:
+
+1. A complete React + TypeScript application.
+2. A clean, modular and scalable project structure.
+3. A reusable design system.
+4. A responsive application shell.
+5. A primary navigation structure.
+6. A functional Home screen with realistic demo data.
+7. A working Space switcher.
+8. A global Add Transaction action.
+9. A central data and persistence layer.
+10. A reusable modal, form, card, button, dropdown, input and chart component system.
+
+### Main application navigation
+
+Desktop navigation should have a clean sidebar.
+
+Mobile navigation should have a compact bottom navigation or an appropriate mobile navigation pattern.
+
+Primary navigation:
+
+- Home
+- Transactions
+- Money
+- Insights
+- More
+
+The Money section should eventually contain:
+- Budgets
+- Goals
+- People
+- Loans
+- Receivables
+- Payables
+- Upcoming
+
+The More section should eventually contain:
+- Spaces
+- Categories
+- Settings
+- Profile
+
+The global Add button should be accessible from the application shell.
+
+### Initial Home screen
+
+Create a visually polished Home screen with:
+
+- Greeting and date.
+- Current Space selector.
+- Total income.
+- Total spent.
+- Net position.
+- Monthly spending overview.
+- Spending by category.
+- Recent transactions.
+- Upcoming payments.
+- A small Finken insight card.
+
+Use realistic PKR demo data.
+
+### Data architecture
+
+Create reusable data models and services. Do not keep all application data inside individual UI components.
+
+Create a central structure for:
+- Users.
+- Spaces.
+- Transactions.
+- Categories.
+- Budgets.
+- Goals.
+- People.
+- Loans.
+- Recurring transactions.
+- Receivables.
+- Payables.
+
+Only implement the initial models required for the foundation now. Extend them as later prompts introduce modules.
+
+Use a repository or service pattern so the storage mechanism can be changed later without rewriting the UI.
+
+### Important
+
+Do not produce a static UI mockup. Build a working application.
+
+At the end, verify:
+- Navigation works.
+- Space switching works.
+- The application is responsive.
+- Demo data is displayed correctly.
+- Data persists after refresh.
+- There are no major runtime errors.
+
+---
+
+# PROMPT 1 — ESTABLISH THE COMPLETE DESIGN SYSTEM AND APPLICATION SHELL
+
+Refine the existing Finken application into a cohesive, premium financial management product.
+
+Do not rebuild the application from scratch. Preserve all existing functionality and improve the visual system consistently.
+
+### Design system
+
+Establish:
+- Primary and secondary colours.
+- Background colours.
+- Text hierarchy.
+- Typography scale.
+- Spacing system.
+- Border radius system.
+- Card styles.
+- Button hierarchy.
+- Input styles.
+- Modal styles.
+- Dropdown styles.
+- Status indicators.
+- Icon conventions.
+- Chart styling.
+
+Use a calm, modern FinTech visual direction.
+
+Prefer a light interface with a sophisticated neutral background, dark readable text and a restrained accent colour. Use positive and negative financial colours consistently.
+
+### Application shell
+
+Create a polished desktop sidebar with:
+- Finken wordmark.
+- Space switcher.
+- Main navigation.
+- Money submenu.
+- Settings and profile area.
+
+Create a mobile layout with:
+- Compact top header.
+- Space selection.
+- Easy access to Add.
+- Bottom navigation.
+
+### Global Add interaction
+
+The Add button should open a quick-action menu containing:
+
+- Expense
+- Income
+- Transfer
+- Receive / Pay
+- Loan
+
+Each action should eventually open its relevant form.
+
+### Shared components
+
+Build reusable components for:
+- Financial summary cards.
+- Transaction list items.
+- Category icons.
+- Progress indicators.
+- Charts.
+- Date selectors.
+- Search fields.
+- Filter panels.
+- Empty states.
+- Confirmation dialogs.
+- Toast notifications.
+
+### UX expectations
+
+Make the experience consistent across every screen.
+
+Ensure:
+- Responsive layouts.
+- Accessible contrast.
+- Clear visual hierarchy.
+- Consistent spacing.
+- Useful hover and focus states.
+- No unnecessary information density.
+
+Do not introduce new product concepts. Work with the existing Finken philosophy.
+
+---
+
+# PROMPT 2 — ONBOARDING, GUEST MODE AND SPACES
+
+Build the complete onboarding experience and Space management functionality.
+
+### 1. Welcome experience
+
+Create a welcoming Finken introduction.
+
+Show:
+- Finken wordmark.
+- "Your Money, Made Simple."
+- A short explanation of what Finken does.
+- Primary CTA: Get Started.
+- Secondary CTA: Try Finken.
+
+Do not force users to create an account before experiencing the product.
+
+### 2. Guest mode
+
+Allow users to enter Finken in guest/demo mode.
+
+Guest users should be able to:
+- Explore the interface.
+- Add transactions.
+- View the dashboard.
+- Create budgets.
+- Create goals.
+- Explore insights.
+- Switch between available demo Spaces.
+
+Clearly communicate that guest data is stored locally in the prototype.
+
+### 3. Account creation experience
+
+Create a simulated registration and login flow.
+
+Include:
+- Name.
+- Email.
+- Password.
+- Confirm password.
+- Login.
+- Logout.
+
+Do not claim to provide secure production authentication. Keep authentication modular for later Firebase integration.
+
+### 4. Space selection
+
+During onboarding, allow users to select their initial Space:
+
+- Personal
+- Business
+- Family
+
+Allow them to create additional Spaces later.
+
+### 5. Space management
+
+Create a dedicated Spaces management screen.
+
+Each Space should have:
+- Name.
+- Type.
+- Icon.
+- Description.
+- Currency.
+- Creation date.
+- Status.
+
+Users should be able to:
+- Create a Space.
+- Edit a Space.
+- Switch Spaces.
+- Archive a Space.
+- Delete a Space with confirmation.
+
+### Business rules
+
+Each Space maintains independent financial records.
+
+Transactions, budgets, goals, categories and financial positions must not accidentally mix across Spaces.
+
+Allow shared default categories where appropriate, but maintain Space-specific customisation.
+
+### UX
+
+Space switching should be fast and intuitive.
+
+The active Space should always be clearly visible.
+
+---
+
+# PROMPT 3 — CORE MONEY ENGINE AND FINANCIAL DATA MODEL
+
+Build the core Money Engine that powers all financial functionality in Finken.
+
+This is one of the most important parts of the application. Prioritise data integrity and reusable business logic.
+
+### Financial activity types
+
+Support five major financial concepts:
+
+**1. Money In**
+- Salary.
+- Sales.
+- Business income.
+- Refunds.
+- Other income.
+
+**2. Money Out**
+- Daily expenses.
+- Bills.
+- Purchases.
+- Business expenses.
+- Loan repayments.
+
+**3. Money Movement**
+- Transfers between accounts.
+- Cash withdrawals.
+- Cash deposits.
+- Transfers between Spaces where explicitly supported.
+
+**4. Money Owed**
+- Receivables.
+- Payables.
+- Personal lending.
+- Borrowing.
+- Shared expenses.
+
+**5. Commitments**
+- Recurring payments.
+- Subscriptions.
+- Bills.
+- Loan instalments.
+- Supplier payments.
+
+### Transaction data model
+
+Create a common transaction model with:
+
+- Transaction ID.
+- Space ID.
+- Transaction type.
+- Amount.
+- Currency.
+- Category ID.
+- Subcategory ID.
+- Transaction date.
+- Description.
+- Payment method or account.
+- Related person, if applicable.
+- Related loan or obligation, if applicable.
+- Recurring transaction reference, if applicable.
+- Notes.
+- Created date.
+- Updated date.
+- Status.
+
+Use appropriate additional fields where required by different transaction types.
+
+### Accounts and payment methods
+
+Allow users to maintain simple money accounts such as:
+
+- Cash.
+- Bank account.
+- Digital wallet.
+- Other.
+
+Do not expose complex accounting terminology.
+
+### Business logic
+
+Implement shared services for:
+- Creating transactions.
+- Editing transactions.
+- Deleting transactions.
+- Filtering transactions.
+- Calculating income.
+- Calculating expenses.
+- Calculating net movement.
+- Calculating balances.
+- Handling transfers without double-counting income or expenses.
+- Updating related financial positions.
+
+### Financial integrity rules
+
+- Transfers are not income or expenses.
+- Loan principal received is not income.
+- Loan principal repaid is not an ordinary expense.
+- Receivable settlement should not create duplicate income.
+- Payable settlement should not create duplicate expenses.
+- Refunds must be associated with the original financial context where possible.
+- Transactions must belong to a valid Space.
+- Deleting or editing a transaction must update all dependent calculations.
+
+### Categories
+
+Create default category structures.
+
+Personal examples:
+- Food: Groceries, Dining Out, Delivery, Snacks.
+- Transport: Fuel, Ride-hailing, Public Transport, Maintenance.
+- Bills: Electricity, Internet, Mobile, Water.
+- Shopping.
+- Health.
+- Education.
+- Entertainment.
+- Housing.
+- Family.
+- Travel.
+- Other.
+
+Business examples:
+- Payroll.
+- Rent.
+- Utilities.
+- Marketing.
+- Logistics.
+- Office.
+- Supplies.
+- Travel.
+- Operations.
+- Professional Services.
+- Other.
+
+Allow custom categories and subcategories.
+
+### Demo data
+
+Create realistic transactions across different dates and categories.
+
+Use data that makes the dashboards and reports meaningful.
+
+Ensure all calculations are derived from the underlying records, not manually hardcoded numbers.
+
+---
+
+# PROMPT 4 — QUICK CAPTURE AND TRANSACTION MANAGEMENT
+
+Build the complete transaction capture and transaction management experience.
+
+The most important UX principle is:
+
+**Recording money must be faster than forgetting about it.**
+
+### Quick Add
+
+The global Add button should open a clean, fast transaction interface.
+
+Options:
+- Expense.
+- Income.
+- Transfer.
+- Receive / Pay.
+- Loan.
+
+### Expense form
+
+Fields:
+- Amount.
+- Category.
+- Subcategory.
+- Date.
+- Payment method.
+- Space.
+- Description.
+- Notes.
+
+### Income form
+
+Fields:
+- Amount.
+- Income source.
+- Date.
+- Account or payment method.
+- Space.
+- Description.
+- Notes.
+
+### Transfer form
+
+Fields:
+- Amount.
+- From account.
+- To account.
+- Date.
+- Description.
+- Space.
+
+Validate that the source and destination are different.
+
+### Receive / Pay
+
+Allow users to record:
+- Money received from someone.
+- Money paid to someone.
+- Amount.
+- Person.
+- Date.
+- Description.
+- Related receivable/payable, if applicable.
+
+### Loan action
+
+Allow users to:
+- Record money borrowed.
+- Record money lent.
+- Select person.
+- Enter amount.
+- Enter date.
+- Set repayment expectations.
+
+### UX requirements
+
+- Amount should be the most prominent field.
+- Use numeric input optimised for mobile.
+- Default the date to today.
+- Remember commonly used categories and payment methods.
+- Provide category icons.
+- Make the form compact.
+- Show only fields relevant to the selected transaction type.
+- Validate required information.
+- Show a clear success confirmation.
+
+### Transaction management
+
+Build a Transactions screen with:
+- Search.
+- Date filters.
+- Type filters.
+- Category filters.
+- Space filters.
+- Account filters.
+- Sorting.
+- Grouping by date.
+
+Each transaction should support:
+- View details.
+- Edit.
+- Delete.
+- Duplicate.
+- Add notes.
+
+### Transaction detail
+
+Show the transaction's complete information and any linked financial records.
+
+### Intelligent capture foundation
+
+Add an optional natural-language input area such as:
+
+"Spent Rs. 850 on dinner yesterday."
+
+For the prototype, implement a basic parsing mechanism that can identify common amounts, dates and transaction types, then show a confirmation form.
+
+Never save an uncertain interpretation without user confirmation.
+
+---
+
+# PROMPT 5 — PEOPLE, RECEIVABLES, PAYABLES AND LOANS
+
+Build Finken's People and Money Owed functionality.
+
+The purpose is to make money owed to and by the user easy to understand.
+
+### 1. People
+
+Create a People screen.
+
+Each person should have:
+- Name.
+- Contact information.
+- Notes.
+- Total amount receivable.
+- Total amount payable.
+- Net position.
+- Transaction history.
+
+Example:
+
+Ahmed — You owe Rs. 5,000.
+
+Ali — Owes you Rs. 8,500.
+
+Usman — Settled.
+
+### 2. Receivables
+
+Allow users to create money receivable records.
+
+Fields:
+- Person.
+- Amount.
+- Date.
+- Expected date.
+- Description.
+- Related Space.
+- Status.
+
+Statuses:
+- Outstanding.
+- Partially received.
+- Settled.
+- Overdue.
+
+Allow partial settlement.
+
+### 3. Payables
+
+Allow users to create money payable records.
+
+Fields:
+- Person or supplier.
+- Amount.
+- Date.
+- Due date.
+- Description.
+- Related Space.
+- Status.
+
+Support partial payment and full settlement.
+
+### 4. Loans
+
+Create a dedicated Loans module.
+
+Support:
+- Money borrowed.
+- Money lent.
+
+Loan fields:
+- Person.
+- Principal amount.
+- Date.
+- Expected repayment date.
+- Interest, optional.
+- Instalment information, optional.
+- Notes.
+- Status.
+
+Show:
+- Original amount.
+- Amount repaid.
+- Remaining balance.
+- Next due date.
+- Repayment history.
+
+### 5. Shared expenses
+
+Allow a user to split an expense between multiple people.
+
+Example:
+
+Dinner total: Rs. 6,000.
+
+Participants:
+- You.
+- Ahmed.
+- Ali.
+
+Split equally into Rs. 2,000 each.
+
+Create the appropriate receivable/payable positions for the other participants.
+
+### Business rules
+
+- Settling an existing receivable must not create new income.
+- Settling an existing payable must not create a duplicate expense.
+- Partial payments must update the remaining balance.
+- The same obligation must not be counted twice.
+- All linked records must update consistently.
+
+### UX
+
+Use simple language such as:
+- You owe.
+- Owes you.
+- Paid.
+- Received.
+- Remaining.
+- Due soon.
+
+Avoid accounting terminology.
+
+---
+
+# PROMPT 6 — BUDGETS, GOALS AND RECURRING TRANSACTIONS
+
+Build Finken's planning and commitment management functionality.
+
+## A. Budgets
+
+Create a Budgets screen.
+
+Users should be able to create:
+- Monthly budgets.
+- Category budgets.
+- Subcategory budgets.
+- Custom-period budgets.
+
+Budget fields:
+- Name.
+- Space.
+- Category.
+- Budget amount.
+- Start date.
+- End date.
+- Frequency.
+
+Show:
+- Budget amount.
+- Amount spent.
+- Remaining amount.
+- Percentage used.
+- Spending pace.
+- Projected spending.
+
+Use clear progress indicators.
+
+Create useful alerts:
+- Budget approaching limit.
+- Budget exceeded.
+- Likely to exceed budget.
+- Spending below expected pace.
+
+Example:
+
+"You're likely to exceed your Food budget by Rs. 4,200 this month."
+
+All calculations must use actual transactions in the relevant Space and budget period.
+
+## B. Goals
+
+Create a Goals screen.
+
+Users can create savings goals such as:
+- New Laptop.
+- Emergency Fund.
+- Family Vacation.
+- Car.
+- Education.
+
+Goal fields:
+- Name.
+- Target amount.
+- Current saved amount.
+- Target date.
+- Space.
+- Description.
+
+Show:
+- Target.
+- Saved.
+- Remaining.
+- Completion percentage.
+- Required monthly saving to achieve the target date.
+
+Allow users to add contributions and withdrawals.
+
+Do not treat a goal contribution as an expense unless it represents an actual money-out transaction. Keep goal allocation separate from financial expenditure.
+
+## C. Recurring transactions
+
+Create a recurring transaction module.
+
+Support:
+- Salary.
+- Rent.
+- School fees.
+- Utilities.
+- Internet.
+- Subscriptions.
+- Loan instalments.
+- Insurance.
+- Supplier payments.
+
+Fields:
+- Name.
+- Amount.
+- Transaction type.
+- Category.
+- Frequency.
+- Start date.
+- End date.
+- Next due date.
+- Space.
+- Payment method.
+- Reminder setting.
+
+Frequencies:
+- Daily.
+- Weekly.
+- Monthly.
+- Quarterly.
+- Yearly.
+- Custom.
+
+Allow users to:
+- Create.
+- Edit.
+- Pause.
+- Resume.
+- Cancel.
+- Mark as paid.
+
+For this prototype, do not automatically create real payments. Generate expected financial events and let users confirm the actual transaction.
+
+---
+
+# PROMPT 7 — UPCOMING MONEY AND FINANCIAL CALENDAR
+
+Build the Coming Up experience.
+
+This should give users a forward-looking view of their financial commitments.
+
+### Coming Up dashboard
+
+Show:
+- Payments due.
+- Expected receivables.
+- Upcoming bills.
+- Loan instalments.
+- Recurring expenses.
+- Expected income.
+- Overdue obligations.
+
+### Views
+
+Provide:
+- Upcoming list.
+- Calendar view.
+- Weekly view.
+- Monthly view.
+
+### Each item should display
+
+- Title.
+- Amount.
+- Due date.
+- Person or supplier, where relevant.
+- Space.
+- Status.
+- Related transaction or recurring record.
+
+### Filters
+
+Allow filtering by:
+- Space.
+- Incoming.
+- Outgoing.
+- Due soon.
+- Overdue.
+- Paid.
+- Received.
+
+### Actions
+
+Users should be able to:
+- Mark as paid.
+- Mark as received.
+- Snooze reminder.
+- Edit.
+- View details.
+
+### Financial summary
+
+Show:
+- Total expected incoming.
+- Total expected outgoing.
+- Net expected movement.
+
+Avoid counting settled obligations again.
+
+Use a clear distinction between actual balances and expected future amounts.
+
+---
+
+# PROMPT 8 — HOME, TODAY AND FINANCIAL DASHBOARD
+
+Now build the complete Finken Home experience.
+
+The dashboard should tell a financial story rather than look like an accounting report.
+
+### Home dashboard
+
+Show the active Space and selected reporting period.
+
+Primary summary:
+- Income.
+- Spent.
+- Net.
+
+Example:
+- Income: Rs. 185,000.
+- Spent: Rs. 121,400.
+- Net: Rs. 63,600.
+
+These values must be calculated dynamically.
+
+### Dashboard sections
+
+1. Financial overview.
+2. Income versus expenses.
+3. Spending by category.
+4. Recent transactions.
+5. Budget progress.
+6. Savings goals.
+7. Upcoming payments.
+8. Receivables and payables.
+9. Finken noticed.
+
+### Finken insight card
+
+Show a short contextual insight.
+
+Examples:
+- "Your dining expenses increased by 27% compared to last month."
+- "Ali still owes you Rs. 8,000."
+- "Your Shopping budget is nearly exhausted."
+- "You have Rs. 12,000 remaining after recorded commitments."
+
+### Today screen
+
+Create a dedicated daily financial view.
+
+Show:
+- Spent today.
+- Received today.
+- Payments due today.
+- Budget remaining.
+- Recent activity.
+- One useful Finken insight.
+
+### Period selection
+
+Support:
+- Today.
+- This week.
+- This month.
+- Last month.
+- Custom range.
+
+### UX
+
+Allow users to drill into figures.
+
+Clicking Income, Spent, category charts or upcoming payments should take users to the corresponding filtered details.
+
+Make the dashboard responsive and avoid overcrowding.
+
+---
+
+# PROMPT 9 — INSIGHTS, ANALYTICS, MONEY HEALTH AND SAFE TO SPEND
+
+Build the Finken intelligence layer.
+
+This is a major differentiator. Finken should not merely record financial activity; it should help users understand it and decide what to do next.
+
+## A. Insights
+
+Create an Insights screen with sections for:
+
+- Spending trends.
+- Income trends.
+- Category behaviour.
+- Budget performance.
+- Recurring patterns.
+- Cash-flow patterns.
+- Unusual spending.
+- Receivable/payable positions.
+
+Examples:
+- Dining spending increased 27%.
+- Transport costs decreased 12%.
+- Your highest spending day is Saturday.
+- You have three upcoming payments this week.
+- Your savings goal is behind schedule.
+
+Insights must be based on actual available data.
+
+Do not generate fictional insights when there is insufficient data.
+
+## B. Behavioural analytics
+
+Create visualisations for:
+- Monthly spending.
+- Category distribution.
+- Income versus expenses.
+- Spending trends.
+- Budget adherence.
+- Recurring expenses.
+- Daily and weekly spending behaviour.
+
+Allow users to filter by Space and date range.
+
+## C. Safe to Spend
+
+Create a signature Safe to Spend feature.
+
+Estimate how much the user can realistically spend after considering:
+
+- Available money.
+- Upcoming payments.
+- Expected commitments.
+- Budget commitments.
+- Savings goals.
+- Expected incoming payments, where appropriate.
+
+Clearly explain the calculation.
+
+Example:
+
+Available money: Rs. 80,000.
+
+Upcoming commitments: Rs. 25,000.
+
+Planned savings: Rs. 10,000.
+
+Estimated safe-to-spend amount: Rs. 45,000.
+
+This is an estimate based on recorded information, not a guaranteed available bank balance.
+
+Never treat unconfirmed expected income as certain money.
+
+## D. Money Health
+
+Create a lightweight Money Health indicator.
+
+Possible inputs:
+- Budget consistency.
+- Savings progress.
+- Upcoming obligations.
+- Spending volatility.
+- Receivable/payable position.
+
+Explain why the indicator changed.
+
+Do not present it as a credit score or financial judgement.
+
+## E. Finken noticed
+
+Create a dedicated insight feed.
+
+Each insight should contain:
+- What Finken noticed.
+- Why it matters.
+- Relevant financial data.
+- Suggested action.
+
+Examples:
+- Review your dining expenses.
+- Follow up on an overdue receivable.
+- Adjust your Shopping budget.
+- Increase savings contributions.
+
+Keep the language neutral, helpful and non-judgmental.
+
+---
+
+# PROMPT 10 — BUSINESS MODE
+
+Build the Business Space experience using the same underlying Money Engine.
+
+Do not create a separate application or duplicate transaction engine.
+
+Business Mode should be simple enough for freelancers and small businesses, but useful enough to understand business performance.
+
+### Business dashboard
+
+Show:
+- Revenue.
+- Expenses.
+- Net position.
+- Receivables.
+- Payables.
+- Cash position.
+- Upcoming commitments.
+
+### Business transactions
+
+Support:
+- Sales and business income.
+- Operating expenses.
+- Customer receipts.
+- Supplier payments.
+- Other business transactions.
+
+Use business categories such as:
+- Payroll.
+- Rent.
+- Utilities.
+- Marketing.
+- Logistics.
+- Office.
+- Supplies.
+- Travel.
+- Operations.
+- Professional Services.
+
+Allow custom categories.
+
+### Customers and suppliers
+
+Create lightweight customer and supplier records.
+
+Each record should have:
+- Name.
+- Contact information.
+- Notes.
+- Receivable/payable balance.
+- Transaction history.
+
+### Receivables and payables
+
+Allow the business user to:
+- Record amounts receivable from customers.
+- Record amounts payable to suppliers.
+- Track partial settlements.
+- Track overdue balances.
+- View ageing information.
+
+### Basic Profit and Loss
+
+Create a simple P&L view:
+
+Revenue  
+– Cost of Goods Sold  
+= Gross Profit  
+– Operating Expenses  
+= Net Profit
+
+Allow users to categorise expenses appropriately.
+
+Do not imply that the result is a formally audited or tax-compliant financial statement.
+
+### Cash flow
+
+Show:
+- Opening cash position.
+- Money received.
+- Money paid.
+- Net cash movement.
+- Closing cash position.
+- Expected future inflows and outflows.
+
+### Business reports
+
+Create:
+- Revenue report.
+- Expense report.
+- Category report.
+- Receivables report.
+- Payables report.
+- P&L report.
+- Cash-flow report.
+
+Support CSV export for the prototype.
+
+### Business-specific UX
+
+Keep the experience straightforward.
+
+Do not introduce inventory, payroll processing, tax filing or complex accounting functionality.
+
+---
+
+# PROMPT 11 — SEARCH YOUR MONEY, FINAL INTEGRATION AND QUALITY ASSURANCE
+
+This is the final integration and refinement phase.
+
+Do not redesign the entire application. Preserve the established design and all working functionality.
+
+## A. Search Your Money
+
+Create a universal financial search experience.
+
+Users should be able to search their own financial records using natural language.
+
+Example queries:
+- How much did I spend on fuel last month?
+- Show my Daraz transactions.
+- How much does Ali owe me?
+- What are my payments this week?
+- What was my highest expense this month?
+- How much did my business spend on marketing?
+
+For the prototype:
+- Implement search using the local data layer.
+- Support common filters and natural-language patterns.
+- Display the interpretation of the search.
+- Show matching records and calculated totals.
+- Provide a clear empty state when no records match.
+
+Do not invent financial data or return unsupported answers.
+
+## B. Global integration
+
+Review all application modules.
+
+Ensure:
+- One transaction engine powers the entire app.
+- Every Space has isolated records.
+- Transactions update dashboards.
+- Transactions update budgets.
+- Transactions update category analytics.
+- Transactions update receivables and payables where relevant.
+- Loan repayments update outstanding loan balances.
+- Recurring events update Coming Up.
+- Settlements update financial positions.
+- All reports use the same underlying data.
+
+## C. Navigation integration
+
+Check every navigation item and submenu.
+
+No dead links.
+
+No placeholder pages presented as finished functionality.
+
+No buttons that do nothing.
+
+## D. Data consistency tests
+
+Run the following scenarios:
+
+1. Add an expense and verify that Spent increases.
+2. Add income and verify that Income increases.
+3. Transfer money between accounts and verify that it is not counted as income or expense.
+4. Add an expense to a category with a budget and verify budget utilisation.
+5. Create a receivable and partially settle it.
+6. Create a payable and partially settle it.
+7. Create a loan and record repayment.
+8. Create a recurring expense and verify its appearance in Coming Up.
+9. Create a goal and add a contribution.
+10. Switch Spaces and verify that financial data does not mix.
+11. Edit and delete transactions and verify all affected screens.
+12. Refresh the browser and verify that data persists.
+
+## E. UI and responsive testing
+
+Review:
+- Desktop.
+- Tablet.
+- Mobile.
+
+Check:
+- Navigation.
+- Modals.
+- Forms.
+- Tables and lists.
+- Charts.
+- Empty states.
+- Text overflow.
+- Button sizing.
+- Scrolling.
+- Responsive layouts.
+
+## F. Performance and maintainability
+
+- Remove duplicate business logic.
+- Reuse components.
+- Avoid unnecessary dependencies.
+- Fix runtime errors.
+- Fix TypeScript errors.
+- Fix broken imports.
+- Check console errors.
+- Avoid unnecessary re-rendering.
+- Ensure data persistence is reliable.
+
+## G. Final handover readiness
+
+Prepare the project for future development in Claude Code.
+
+Ensure:
+- Clean folder structure.
+- Readable TypeScript.
+- Reusable components.
+- Centralised business logic.
+- Documented data models.
+- Clear storage abstraction.
+- No unnecessary hardcoded values.
+- No secrets or API keys committed to source code.
+
+Create a README containing:
+1. Product overview.
+2. Application architecture.
+3. Folder structure.
+4. Data models.
+5. Business rules.
+6. Current functional modules.
+7. How to run the application.
+8. Known limitations.
+9. Suggested next steps for production development.
+
+The final result should be a complete, interactive Finken prototype that can be used to validate product experience, workflows, navigation, calculations and feature behaviour before production engineering begins.

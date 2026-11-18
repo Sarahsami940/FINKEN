@@ -1,0 +1,1318 @@
+# Finken — MASTER PRODUCT CONTEXT
+
+## Instructions for AI
+
+This document is the source of truth for the Finken product.
+
+When working on Finken:
+- Preserve established product decisions unless explicitly asked to revisit them.
+- Do not assume a feature belongs in V1 simply because it is mentioned as a future possibility.
+- Distinguish between current decisions, proposed ideas, and future roadmap items.
+- Keep Finken's core philosophy intact: "Simple on the surface. Intelligent underneath."
+- Prefer simple UX over accounting/ERP complexity.
+- When proposing new features, explain how they fit into the existing Finken architecture.
+- Do not unnecessarily reinvent decisions already documented here.
+- If a new proposal conflicts with an existing decision, explicitly identify the conflict before suggesting a change.
+
+## Current Working Decisions
+
+- Product name: Finken
+- Tagline direction: "Your Money, Made Simple."
+- Category: Personal & Small Business Financial Management
+- Core philosophy: Capture → Organize → Understand → Plan → Act → Improve
+- Core architecture: Shared Money Engine with Personal and Business contexts
+- User-facing organizational concept: Spaces
+- Product philosophy: Simple on the surface. Intelligent underneath.
+- Initial platform direction: Offline-first Progressive Web Application
+- Commercial direction: Freemium → Plus → Business → Ecosystem
+- Initial scope: Avoid becoming an ERP
+- Long-term differentiation: Financial intelligence and actionable insights, not merely transaction recording
+
+
+# Finken
+
+### Your Money, Made Simple.
+
+## 1. Product Vision
+
+**Finken is a simple, intelligent personal and small-business money management platform that helps people capture, organize, understand, plan, and act on their finances.**
+
+Finken is not intended to feel like accounting software.
+
+It should feel like a **friendly financial companion** that quietly helps users answer:
+
+> **Where is my money?**\
+> **Where is it going?**\
+> **What's coming up?**\
+> **What can I afford?**\
+> **What should I do next?**
+
+The core product philosophy is:
+
+### **Capture → Organize → Understand → Plan → Act → Improve**
+
+---
+
+# 2. The Product Opportunity
+
+Most expense applications focus primarily on:
+
+> **"Record what you spent."**
+
+Finken should go further:
+
+> **"Record your money once, and let Finken help you understand and manage it."**
+
+The product therefore has three layers:
+
+### Layer 1 — Money Management
+
+Record and organize financial activity.
+
+### Layer 2 — Financial Intelligence
+
+Understand spending, income, obligations, trends and behaviour.
+
+### Layer 3 — Financial Action
+
+Budgets, goals, reminders, recommendations and financial decisions.
+
+This creates a product that can start simple but grow into a broader financial platform.
+
+---
+
+# 3. Target Users
+
+Finken should initially support two primary contexts.
+
+## Personal
+
+For individuals and families managing:
+
+- Daily expenses
+- Income
+- Household expenses
+- Budgets
+- Savings goals
+- Loans
+- Money owed / receivable
+- Bills
+- Subscriptions
+- Shared expenses
+
+## Business
+
+For freelancers, entrepreneurs and small businesses managing:
+
+- Business income
+- Operating expenses
+- Customers
+- Suppliers
+- Receivables
+- Payables
+- Loans
+- Budgets
+- Cash flow
+- Business performance
+- Basic P&L
+- Reports
+
+The underlying financial engine should be shared between both.
+
+---
+
+# 4. The Core Concept — Spaces
+
+Rather than making users think about complicated "accounts" and "ledgers", Finken introduces:
+
+## **Spaces**
+
+A Space is a financial environment.
+
+A user could have:
+
+🏠 **Personal**
+
+💼 **Business**
+
+👨‍👩‍👧 **Family**
+
+🚗 **Car**
+
+🏢 **Company A**
+
+🛍 **Side Business**
+
+Each Space has its own:
+
+- Income
+- Expenses
+- Categories
+- Budgets
+- Goals
+- Receivables
+- Payables
+- Loans
+- Dashboard
+- Analytics
+
+Users can switch between Spaces without creating separate Finken accounts.
+
+This allows Finken to remain simple for an individual while also supporting increasingly sophisticated users.
+
+---
+
+# 5. Core Money Engine
+
+Everything in Finken ultimately revolves around a simple financial activity engine.
+
+### Money In
+
+- Salary
+- Sales
+- Business income
+- Refunds
+- Other income
+
+### Money Out
+
+- Expense
+- Bill
+- Purchase
+- Business expense
+- Loan repayment
+
+### Money Movement
+
+- Transfer
+- Cash withdrawal
+- Cash deposit
+- Movement between Spaces/accounts
+
+### Money Owed
+
+- Receivable
+- Payable
+- Personal lending
+- Borrowing
+- Shared expenses
+
+### Commitments
+
+- Recurring payments
+- Subscriptions
+- Bills
+- Loan installments
+
+The user does not need to understand accounting terminology.
+
+---
+
+# 6. Quick Capture — The Heart of Finken
+
+The most important UX principle:
+
+> **Recording money must be faster than forgetting about it.**
+
+The primary action should be:
+
+### `+ Add`
+
+The user chooses:
+
+**Expense | Income | Transfer | Receive/Pay | Loan**
+
+For example:
+
+> Rs. 850
+
+🍔 Food → Dining
+
+🏠 Personal
+
+Today
+
+"Family dinner"
+
+**Save**
+
+The goal is a transaction taking only a few seconds.
+
+---
+
+# 7. Intelligent Capture
+
+As Finken learns the user's behaviour, it should reduce input further.
+
+If someone repeatedly records:
+
+> Rs. 500 → Lunch → Food
+
+Finken can suggest:
+
+> **Lunch — Rs. 500?**
+
+The longer-term vision is natural-language capture:
+
+> "Spent 850 on dinner"
+
+Finken interprets:
+
+**Rs. 850 → Food → Dining → Personal**
+
+The user confirms and saves.
+
+This can eventually become one of the strongest differentiators of Finken.
+
+---
+
+# 8. Categories & Subcategories
+
+Keep categorization simple and visual.
+
+### Food 🍔
+
+- Groceries
+- Dining Out
+- Delivery
+- Snacks
+
+### Transport 🚗
+
+- Fuel
+- Ride-hailing
+- Public Transport
+- Maintenance
+
+### Bills 💡
+
+- Electricity
+- Internet
+- Mobile
+- Water
+
+Each category can have:
+
+- Icon
+- Subcategories
+- Budget
+- Goal
+- Spending history
+- Notes
+- Behavioural insights
+
+Users can also create custom categories.
+
+---
+
+# 9. People
+
+Finken should introduce a simple **People** layer.
+
+Instead of only showing:
+
+> Receivable: Rs. 25,000
+
+users see:
+
+### People
+
+**Ahmed**
+
+You owe: Rs. 5,000
+
+**Ali**
+
+Owes you: Rs. 8,500
+
+**Usman**
+
+Settled ✓
+
+This connects naturally with:
+
+- Loans
+- Receivables
+- Payables
+- Shared expenses
+- Expense splitting
+
+---
+
+# 10. Split Expenses
+
+For shared expenses:
+
+Dinner:
+
+**Rs. 6,000**
+
+Split:
+
+Ahmed — Rs. 2,000\
+Ali — Rs. 2,000\
+You — Rs. 2,000
+
+Finken automatically creates the relevant receivable/payable positions.
+
+---
+
+# 11. Loans
+
+A dedicated but simple loan management system.
+
+### Borrowed
+
+> Rs. 100,000 from Ahmed
+
+Remaining:
+
+> Rs. 60,000
+
+Next payment:
+
+> Rs. 20,000 — 15 Oct
+
+### Lent
+
+> Rs. 50,000 to Ali
+
+Remaining:
+
+> Rs. 50,000
+
+Due:
+
+> 20 Oct
+
+Finken handles:
+
+- Loan amount
+- Repayments
+- Remaining balance
+- Due dates
+- Reminders
+- History
+
+---
+
+# 12. Recurring Transactions
+
+Users can mark transactions as recurring:
+
+- Salary
+- Rent
+- School fees
+- Utilities
+- Internet
+- Subscriptions
+- Loan installments
+- Insurance
+- Supplier payments
+
+Finken automatically builds an upcoming financial calendar.
+
+---
+
+# 13. "Coming Up"
+
+Rather than forcing users to understand cash-flow forecasting, Finken gives them:
+
+## Coming Up
+
+**This Week**
+
+🏠 Rent — Rs. 50,000\
+💳 Loan — Rs. 12,000\
+🌐 Internet — Rs. 4,500
+
+**Expected Receivables**
+
+Ali — Rs. 8,000
+
+This becomes the user's forward-looking financial view.
+
+---
+
+# 14. Safe to Spend
+
+One of Finken's potential signature features.
+
+Instead of simply showing:
+
+> Balance: Rs. 120,000
+
+Finken can show:
+
+## Safe to Spend
+
+### Rs. 67,500
+
+Based on:
+
+- Current money
+- Upcoming commitments
+- Budget commitments
+- Savings goals
+- Expected payments
+
+The user gets an answer to:
+
+> **"How much can I realistically spend?"**
+
+Rather than merely:
+
+> "How much money do I currently have?"
+
+This should always be presented as an estimate based on recorded information.
+
+---
+
+# 15. Budgets
+
+Users can establish:
+
+### Monthly Budget
+
+Food:
+
+**Rs. 40,000**
+
+Spent:
+
+**Rs. 31,200**
+
+Remaining:
+
+**Rs. 8,800**
+
+But Finken should go beyond static budget tracking.
+
+It can calculate spending pace:
+
+> **At your current pace, you're likely to exceed your Food budget by Rs. 4,200.**
+
+The user can act immediately:
+
+`Adjust Budget`\
+`View Spending`
+
+---
+
+# 16. Goals
+
+Goals should be simple.
+
+### New Laptop
+
+Target:
+
+**Rs. 250,000**
+
+Saved:
+
+**Rs. 140,000**
+
+Remaining:
+
+**Rs. 110,000**
+
+Target date:
+
+**March 2027**
+
+Finken can track progress and show:
+
+> You're currently on track.
+
+Goals can be linked to Spaces and categories.
+
+---
+
+# 17. Dashboard
+
+The dashboard should not resemble accounting software.
+
+It should tell the user's financial story.
+
+## Your Money
+
+### September
+
+**Income**
+
+Rs. 185,000
+
+**Spent**
+
+Rs. 121,400
+
+**Net**
+
+Rs. 63,600
+
+### Where did it go?
+
+Food — Rs. 28,400\
+Transport — Rs. 17,200\
+Shopping — Rs. 14,500\
+Bills — Rs. 12,800
+
+### Coming Up
+
+3 payments
+
+Rs. 18,500
+
+### Finken noticed
+
+> Your transport spending increased 14% compared with your recent average.
+
+---
+
+# 18. Today
+
+The home experience should also provide a daily view.
+
+## Today
+
+💸 Spent: Rs. 2,450
+
+💰 Received: Rs. 8,000
+
+🔔 Payments due: 2
+
+🎯 Budget remaining: Rs. 3,200
+
+### Finken says
+
+> Your spending today is within your normal range.
+
+This gives users a reason to open Finken regularly.
+
+---
+
+# 19. Behavioural Analytics
+
+This is where Finken moves beyond an expense tracker.
+
+Instead of:
+
+> Food = Rs. 42,000
+
+Finken identifies:
+
+> Food spending increased 23% this month.
+
+Then:
+
+> Dining accounts for 41% of your Food spending.
+
+Then:
+
+> You usually spend more on dining during weekends.
+
+Analytics can identify:
+
+- Spending trends
+- Category changes
+- Spending frequency
+- Weekend behaviour
+- Recurring patterns
+- Budget adherence
+- Income trends
+- Cash-flow patterns
+- Unusual transactions
+- Expense concentration
+
+The language should remain neutral and useful.
+
+Not:
+
+> "You waste too much money."
+
+Instead:
+
+> "Dining is currently your fastest-growing expense category."
+
+---
+
+# 20. Money Health
+
+Finken can eventually provide a lightweight financial-health indicator.
+
+Not a credit score.
+
+Not a judgment.
+
+Instead:
+
+## Money Health
+
+**Improving**
+
+Based on:
+
+- Budget consistency
+- Savings progress
+- Upcoming obligations
+- Spending volatility
+- Receivable/payable position
+
+Finken explains *why* the indicator changed.
+
+> Budget consistency ↑\
+> Savings consistency ↑\
+> Spending volatility ↓
+
+The emphasis is on improvement rather than judgment.
+
+---
+
+# 21. Finken Insights
+
+The original "Financial Literacy Digest" becomes something more actionable:
+
+# **Finken Insights**
+
+The question is:
+
+> **"What should I know or do next?"**
+
+Examples:
+
+### Spending Insight
+
+> Dining increased 27% this month.
+
+`Review Dining`
+
+### Reminder
+
+> Ali owes you Rs. 8,000.
+
+`Remind Ali`
+
+### Budget Alert
+
+> You're likely to exceed your Shopping budget.
+
+`Review Budget`
+
+### Goal Insight
+
+> You have Rs. 15,000 above your savings target.
+
+`Review Goal`
+
+The content should be personalized and action-driven rather than generic financial articles.
+
+---
+
+# 22. Financial Literacy
+
+Finken can still have an educational layer, but keep it contextual.
+
+Instead of a long educational course:
+
+> 💡 **Did you know?**
+
+When a user creates a budget:
+
+> A budget works best when you review spending throughout the month rather than only at month-end.
+
+When creating a loan:
+
+> 💡 Finken can remind you before your repayment is due.
+
+Education becomes part of the product rather than a separate content library.
+
+---
+
+# 23. Search Your Money
+
+Introduce a universal financial search.
+
+Users can ask:
+
+> "How much did I spend on fuel last month?"
+
+> "Show my Daraz transactions."
+
+> "How much does Ali owe me?"
+
+> "What are my payments this week?"
+
+The system should return answers from the user's own financial data.
+
+This becomes increasingly powerful as Finken's data model matures.
+
+---
+
+# 24. Business Mode
+
+Business should use the same simple philosophy but provide additional depth.
+
+### Business Dashboard
+
+Revenue:
+
+**Rs. 2.4M**
+
+Expenses:
+
+**Rs. 1.7M**
+
+Net:
+
+**Rs. 700K**
+
+Receivables:
+
+**Rs. 480K**
+
+Payables:
+
+**Rs. 320K**
+
+---
+
+# 25. Business Categories
+
+Examples:
+
+- Payroll
+- Rent
+- Utilities
+- Marketing
+- Logistics
+- Office
+- Supplies
+- Travel
+- Operations
+- Professional Services
+
+Businesses can create their own category hierarchy.
+
+---
+
+# 26. Basic Business P&L
+
+Eventually:
+
+Revenue
+
+− Cost of Goods
+
+────────────
+
+Gross Profit
+
+− Operating Expenses
+
+────────────
+
+Net Profit
+
+The underlying system can support accounting dimensions, while the user interface remains simple.
+
+---
+
+# 27. Business Cash Flow
+
+The business dashboard can show:
+
+### Cash Position
+
+Current cash
+
+### Coming In
+
+Expected receivables
+
+### Going Out
+
+Payables + recurring commitments
+
+### Forecast
+
+Expected cash position.
+
+This gives small businesses visibility without requiring a full ERP.
+
+---
+
+# 28. Business Reports
+
+Businesses can generate:
+
+- Expense reports
+- Income reports
+- P&L
+- Receivable reports
+- Payable reports
+- Cash-flow reports
+- Category reports
+- Monthly statements
+
+And export:
+
+- Excel
+- CSV
+- PDF
+
+This also makes Finken useful to accountants.
+
+---
+
+# 29. Accountant Ecosystem
+
+A future **Finken Accountant** ecosystem can allow businesses to grant accountants controlled access.
+
+Accountants could:
+
+- Review transactions
+- Categorize transactions
+- Reconcile records
+- Review P&L
+- Prepare reports
+- Provide financial support
+
+This creates a potential professional-services ecosystem around Finken.
+
+---
+
+# 30. Offline-First PWA
+
+Finken should be designed as a:
+
+## Progressive Web Application
+
+with:
+
+- Desktop Web
+- Mobile Web
+- Installable PWA
+- Responsive UI
+- Offline transaction capture
+- Automatic synchronization
+- Cloud backup
+
+The user should not need to think:
+
+> "Am I online?"
+
+They should simply be able to record a transaction.
+
+---
+
+# 31. Guest / Try Finken Mode
+
+Don't force signup immediately.
+
+First launch:
+
+# Welcome to Finken 👋
+
+**Your money, made simple.**
+
+What would you like to manage?
+
+`Personal`
+
+`Business`
+
+Let users experience:
+
+- Adding an expense
+- Dashboard
+- Categories
+- Budget
+- Insight
+
+Then:
+
+> **Create your Finken account to save and sync your data.**
+
+This minimizes signup friction.
+
+---
+
+# 32. Onboarding
+
+Avoid long tutorials.
+
+Use contextual education.
+
+First expense:
+
+> 💡 You can set a budget for Food.
+
+First budget:
+
+> 💡 Finken will monitor your spending pace.
+
+First loan:
+
+> 💡 Finken can remind you before repayments are due.
+
+Users learn Finken while using it.
+
+---
+
+# 33. Search & Navigation
+
+The core navigation should remain extremely simple.
+
+### Personal
+
+**Home**
+
+**Transactions**
+
+**Money**
+
+**Insights**
+
+**More**
+
+Where:
+
+**Money**
+
+→ Budgets\
+→ Goals\
+→ People\
+→ Loans\
+→ Receivables\
+→ Payables\
+→ Upcoming
+
+This prevents the product from becoming menu-heavy.
+
+---
+
+# 34. Visual Identity
+
+Finken should feel like:
+
+### **Modern FinTech + Productivity**
+
+rather than accounting software.
+
+Design language:
+
+- Gradient accents
+- Rounded cards
+- Large numbers
+- Friendly icons
+- Subtle animations
+- Progress indicators
+- Clean charts
+- Strong typography
+- Simple navigation
+- Playful but trustworthy visual language
+
+The interface should be friendly without compromising financial clarity.
+
+---
+
+# 35. Commercial Model
+
+Finken should use a **Freemium → Plus → Business → Ecosystem** model.
+
+## Finken Free
+
+The free product should be genuinely useful.
+
+- Personal Space
+- Basic transactions
+- Income
+- Expenses
+- Categories
+- Basic dashboard
+- Basic budgets
+- Basic reminders
+- Limited history
+- Offline capture
+
+Purpose:
+
+> **Create the financial habit.**
+
+---
+
+# 36. Finken Plus
+
+Paid personal tier.
+
+Potential features:
+
+- Unlimited transaction history
+- Multiple Spaces
+- Advanced analytics
+- Behavioural insights
+- Advanced budgets
+- Goals
+- Cash-flow forecasting
+- Safe-to-Spend
+- Advanced reminders
+- Recurring transactions
+- Advanced search
+- Export
+- Advanced reports
+- Enhanced backup/sync
+
+The exact pricing should be validated through market testing rather than fixed initially.
+
+---
+
+# 37. Finken Business
+
+For freelancers and SMBs.
+
+Potential features:
+
+- Business Space
+- Business dashboard
+- P&L
+- Cash flow
+- Customers
+- Suppliers
+- Receivables
+- Payables
+- Business budgets
+- Team members
+- Permissions
+- Reports
+- Export
+- Accountant access
+
+This becomes the higher-value subscription tier.
+
+---
+
+# 38. Future Revenue Streams
+
+Finken can eventually have multiple revenue streams.
+
+### 1. Subscriptions
+
+Personal Plus
+
+Business
+
+Business Pro
+
+### 2. Professional Services
+
+Accountant ecosystem
+
+Bookkeeping
+
+Financial reporting
+
+Tax/accounting support
+
+### 3. Partner Ecosystem
+
+Potential partnerships with:
+
+- Banks
+- Payment providers
+- Insurance providers
+- Accounting firms
+- SME service providers
+
+Potential models:
+
+- Referral fees
+- Service commissions
+- Revenue sharing
+
+These should only be introduced with appropriate user consent, privacy protections and regulatory compliance.
+
+### 4. Financial Infrastructure
+
+At a later stage, Finken could potentially become a financial platform around:
+
+- Payments
+- Invoicing
+- Collections
+- Business finance
+- Financial services
+
+This should not be part of V1.
+
+---
+
+# 39. What Finken Should NOT Become Initially
+
+Avoid turning Finken into an ERP.
+
+Don't initially overload it with:
+
+- Inventory
+- Payroll
+- Complex taxation
+- Full accounting workflows
+- Complex double-entry UI
+- Large accounting reports
+- Investment management
+- Cryptocurrency
+- Excessive banking integrations
+- Hundreds of categories
+- Complicated permissions
+- AI features added only for novelty
+
+The backend can be designed for future expansion.
+
+The front-end should remain simple.
+
+---
+
+# 40. Product Roadmap
+
+## Phase 1 — Capture
+
+**Goal: Build the habit.**
+
+- Personal/Business
+- Spaces
+- Income
+- Expenses
+- Categories
+- Notes
+- Dashboard
+- Offline mode
+- Quick Add
+- Guest mode
+
+---
+
+## Phase 2 — Control
+
+**Goal: Help users manage money.**
+
+- Budgets
+- Goals
+- People
+- Receivables
+- Payables
+- Loans
+- Recurring transactions
+- Reminders
+- Coming Up
+
+---
+
+## Phase 3 — Understand
+
+**Goal: Make Finken intelligent.**
+
+- Behavioural analytics
+- Spending trends
+- Money Health
+- Cash-flow forecasting
+- Safe-to-Spend
+- Advanced search
+- Finken Insights
+
+---
+
+## Phase 4 — Business
+
+**Goal: Expand monetization.**
+
+- Business P&L
+- Cash flow
+- Customers
+- Suppliers
+- Reports
+- Team members
+- Accountant access
+- Business subscriptions
+
+---
+
+## Phase 5 — Ecosystem
+
+**Goal: Expand Finken beyond financial tracking.**
+
+- Accountant ecosystem
+- Financial-service partnerships
+- Payment integrations
+- Invoicing
+- Collections
+- Banking integrations
+- SME financial services
+
+---
+
+# 41. The Finken Product Flywheel
+
+The long-term product flywheel should be:
+
+**User records transactions**
+
+↓
+
+**Finken understands behaviour**
+
+↓
+
+**Finken generates useful insights**
+
+↓
+
+**User takes action**
+
+↓
+
+**Financial behaviour improves**
+
+↓
+
+**User trusts Finken more**
+
+↓
+
+**User records more financial activity**
+
+↓
+
+**Finken becomes more useful**
+
+↓
+
+**User upgrades to premium/business features**
+
+This is the core product-growth loop.
+
+---
+
+# 42. The Ultimate Finken Positioning
+
+Finken should not compete only in the category:
+
+> **Expense Tracker**
+
+Its broader category is:
+
+> **Personal & Small Business Financial Management**
+
+And its long-term positioning can be:
+
+# **Finken**
+
+### **Know your money. Manage your money.**
+
+The product promise:
+
+> **Finken brings your income, expenses, obligations, goals and financial behaviour into one simple place — then helps you understand what is happening and decide what to do next.**
+
+The product should always feel like:
+
+### **Simple on the surface. Intelligent underneath.**
+
+That, in my view, is the strongest version of the idea: **a very easy expense/income recorder at the entry point, a financial-management tool as users mature, and eventually a monetizable financial platform underneath.**
