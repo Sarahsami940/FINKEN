@@ -1,0 +1,14 @@
+{
+  "name": "@finken/domain",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Finken's money rules: pure functions shared by the web app and the API.",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  }
+}

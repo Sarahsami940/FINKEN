@@ -1,0 +1,20 @@
+# Local development database on port 5433 (5432 is often taken by an installed Postgres).
+# Start it with: npm run db:up
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: finken
+      POSTGRES_PASSWORD: finken
+      POSTGRES_DB: finken
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - finken-db:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finken -d finken"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+volumes:
+  finken-db:

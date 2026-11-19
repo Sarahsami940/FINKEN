@@ -1,0 +1,26 @@
+{
+  "name": "@finken/api",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch --env-file-if-exists=.env --import tsx src/server.ts",
+    "start": "node dist/server.js",
+    "db:migrate": "node --env-file-if-exists=.env --import tsx src/migrate.ts",
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@finken/domain": "*",
+    "fastify": "^5.12.8",
+    "postgres": "^4.1.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.17",
+    "@types/node": "^24.0.0",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.15"
+  }
+}

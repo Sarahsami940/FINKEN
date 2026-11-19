@@ -1,0 +1,7 @@
+{
+  "extends": "../../tsconfig.base.json",
+  // DOM types supply URLSearchParams and crypto.randomUUID. The money rules may
+  // only use globals that browsers and Node 24 both provide; never document or window.
+  "compilerOptions": { "lib": ["ES2022", "DOM"], "types": [] },
+  "include": ["src"]
+}

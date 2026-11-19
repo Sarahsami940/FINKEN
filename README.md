@@ -22,13 +22,14 @@ People can try everything as a **guest** with demo data, then create a (local, s
 
 ## 2. Application architecture
 
-- **React 19 + TypeScript (strict) + Vite**, styled with **Tailwind CSS v4** design tokens in `src/index.css`; icons from `lucide-react`; routing with `react-router-dom`; the Plus Jakarta Sans font bundled from `@fontsource-variable`. No other runtime dependencies.
-- **One Money Engine.** All figures come from pure functions in `src/domain/`. They take records and return numbers; no React, no storage, nothing cached. Every screen, report, insight and search answer calls the same functions, so they always agree.
-- **One store.** `src/data/store.ts` holds all state in memory and is the only place records are written. Every write is validated (`checkTransaction` and friends), applied to state, and saved through the storage adapter in the background. Screens subscribe with `useAppState` / `useSpaceData` (`src/data/hooks.ts`).
-- **Storage abstraction.** The store only talks to `StorageAdapter` (`src/data/storage.ts`). `IndexedDbAdapter` is used in the browser; `MemoryAdapter` is used in tests and when IndexedDB is unavailable. A server or Firebase adapter can replace it without touching logic or UI.
-- **Auth abstraction.** `AuthService` (`src/data/auth.ts`) with a local, prototype-only implementation.
+- **React 19 + TypeScript (strict) + Vite**, styled with **Tailwind CSS v4** design tokens in `apps/web/src/index.css`; icons from `lucide-react`; routing with `react-router-dom`; the Plus Jakarta Sans font bundled from `@fontsource-variable`. No other runtime dependencies.
+- **One Money Engine.** All figures come from pure functions in the shared `@finken/domain` package (`packages/domain/src/`). They take records and return numbers; no React, no storage, nothing cached. Every screen, report, insight and search answer calls the same functions, so they always agree. The API will run the same functions to check every save on the server.
+- **One store.** `apps/web/src/data/store.ts` holds all state in memory and is the only place records are written. Every write is validated (`checkTransaction` and friends), applied to state, and saved through the storage adapter in the background. Screens subscribe with `useAppState` / `useSpaceData` (`apps/web/src/data/hooks.ts`).
+- **Storage abstraction.** The store only talks to `StorageAdapter` (`apps/web/src/data/storage.ts`). `IndexedDbAdapter` is used in the browser; `MemoryAdapter` is used in tests and when IndexedDB is unavailable. An API-backed adapter will replace it in Phase 2 without touching logic or UI.
+- **Auth abstraction.** `AuthService` (`apps/web/src/data/auth.ts`) with a local, prototype-only implementation.
 - **Space isolation.** `useSpaceData()` returns only the active Space's records; `useSpaceRecords(id)` returns one named Space's. Cross-Space views (Transactions, Analytics, Search) filter explicitly.
-- **Code splitting.** Home, Transactions, Money and More load with the app; the other screens load the first time they are opened (`src/App.tsx`).
+- **API (foundation only).** `apps/api` is a Fastify server on PostgreSQL. It has configuration checks, health and readiness endpoints, and plain-SQL migrations. It stores no money records yet; the web app does not call it yet.
+- **Code splitting.** Home, Transactions, Money and More load with the app; the other screens load the first time they are opened (`apps/web/src/App.tsx`).
 
 ```
  UI (pages, components) ──reads──▶ hooks.ts ──▶ store state
@@ -40,42 +41,59 @@ People can try everything as a **guest** with demo data, then create a (local, s
 ## 3. Folder structure
 
 ```
-src/
-  domain/            Pure business logic (no React, no storage)
-    types.ts           Data models, documented field by field
-    money.ts           Money Engine: totals, balances, categories, refunds, money owed, integrity checks
-    planning.ts        Budgets (periods, pace, projection, history), goals, recurring schedules
-    upcoming.ts        Expected events for Coming up (recurring items and money owed)
-    dashboard.ts       Reporting periods, fair comparisons, chart buckets, budget left today
-    insights.ts        "Finken noticed" rules, grouped by topic
-    analytics.ts       Monthly totals, category trends, weekday habits, budget adherence, regular payments
-    health.ts          Safe to Spend and Money Health
-    business.ts        Profit and loss, cash flow, ageing, customers and suppliers
-    reports.ts         Business reports as tables, and CSV export
-    search.ts          Search Your Money: question parser and runner
-    capture.ts         "Type it": a sentence into a draft transaction
-    dates.ts, format.ts, palette.ts
-    *.test.ts          Unit tests beside the code they test
-  data/              State and persistence
-    store.ts           Central store and every write action
-    storage.ts         StorageAdapter + IndexedDB and in-memory adapters
-    auth.ts            AuthService + LocalAuthService (prototype sign-in)
-    hooks.ts           useAppState, useSpaceData, useSpaceRecords
-    seed.ts            Demo data for three Spaces, generated relative to today
-    defaults.ts        Default categories and accounts per Space type
-    integration.test.ts  The 12 data-consistency scenarios, run against the real store
-  components/
-    ui/                Design system: Button, Card, Field, Modal, Dropdown, Toast, Misc (Badge, Segmented, ProgressBar…)
-    charts/            MonthlyBars, FlowBars, DonutChart, MiniBars
-    money/             Add flow, transaction form, Receive/Pay and Loan forms, money-owed sheets, dashboard parts
-  app/               Shell (sidebar, mobile header, bottom nav), navigation config, Space switcher
-  onboarding/        Welcome, sign-up, login, guest and first-Space steps
-  pages/             One file per area (PlanningPages.tsx: Budgets, Goals, Recurring; OwedPages.tsx: People, Loans, To receive, To pay)
+packages/
+  domain/              @finken/domain: pure business logic shared by web and API (no React, no storage)
+    src/
+      types.ts           Data models, documented field by field
+      money.ts           Money Engine: totals, balances, categories, refunds, money owed, integrity checks
+      planning.ts        Budgets (periods, pace, projection, history), goals, recurring schedules
+      upcoming.ts        Expected events for Coming up (recurring items and money owed)
+      dashboard.ts       Reporting periods, fair comparisons, chart buckets, budget left today
+      insights.ts        "Finken noticed" rules, grouped by topic
+      analytics.ts       Monthly totals, category trends, weekday habits, budget adherence, regular payments
+      health.ts          Safe to Spend and Money Health
+      business.ts        Profit and loss, cash flow, ageing, customers and suppliers
+      reports.ts         Business reports as tables, and CSV export
+      search.ts          Search Your Money: question parser and runner
+      capture.ts         "Type it": a sentence into a draft transaction
+      defaults.ts        Default categories and accounts per Space type
+      seed.ts            Demo data for three Spaces, generated relative to today
+      dates.ts, format.ts, palette.ts
+      *.test.ts          Unit tests beside the code they test
+apps/
+  web/                 @finken/web: the React app
+    src/
+      data/              State and persistence
+        store.ts           Central store and every write action
+        storage.ts         StorageAdapter + IndexedDB and in-memory adapters
+        auth.ts            AuthService + LocalAuthService (prototype sign-in)
+        hooks.ts           useAppState, useSpaceData, useSpaceRecords
+        integration.test.ts  The 12 data-consistency scenarios, run against the real store
+      components/
+        ui/                Design system: Button, Card, Field, Modal, Dropdown, Toast, Misc (Badge, Segmented, ProgressBar…)
+        charts/            MonthlyBars, FlowBars, DonutChart, MiniBars
+        money/             Add flow, transaction form, Receive/Pay and Loan forms, money-owed sheets, dashboard parts
+      app/               Shell (sidebar, mobile header, bottom nav), navigation config, Space switcher
+      onboarding/        Welcome, sign-up, login, guest and first-Space steps
+      pages/             One file per area (PlanningPages.tsx: Budgets, Goals, Recurring; OwedPages.tsx: People, Loans, To receive, To pay)
+  api/                 @finken/api: Fastify + PostgreSQL
+    src/
+      config.ts          Environment settings, checked at start-up
+      db.ts              Database interface and the postgres.js connection
+      migrate.ts         Migration runner (npm run db:migrate)
+      app.ts             Routes: /health and /ready
+      server.ts          Starts the server and shuts it down cleanly
+      testing.ts         In-memory Postgres (PGlite) for tests
+    migrations/        Numbered SQL files, applied in order and never edited once applied
+    Dockerfile         Production image
+docs/ENVIRONMENTS.md   Development, staging and production
+docker-compose.yml     Local Postgres for development
+.github/               Automatic checks (CI) and dependency updates
 ```
 
 ## 4. Data models
 
-All models are in `src/domain/types.ts` with comments on every field. Amounts are always positive numbers; direction comes from the type. Dates are local `YYYY-MM-DD` strings.
+All models are in `packages/domain/src/types.ts` with comments on every field. Amounts are always positive numbers; direction comes from the type. Dates are local `YYYY-MM-DD` strings.
 
 | Model | What it is | Key fields |
 | --- | --- | --- |
@@ -157,24 +175,45 @@ Transaction types:
 
 ## 7. How to run the application
 
-Requires Node.js 20 or later.
+Requires Node.js 24 or later. The API also needs Docker (for the local database).
+
+**The web app**
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open http://localhost:5173 and choose **Try Finken** to explore with demo data, or **Get Started** for an empty account.
+Open http://localhost:5173 and choose **Try Finken** to explore with demo data, or **Get Started** for an empty account. The web app does not need the API yet.
+
+**The API and database**
 
 ```bash
-npm test        # 128 unit and integration tests (Vitest)
-npm run build   # type-check and production build into dist/
-npm run preview # serve the production build
+cp apps/api/.env.example apps/api/.env   # local settings; never commit .env
+npm run db:up                            # Postgres 18 in Docker, on port 5433
+npm run db:migrate                       # apply database migrations
+npm run dev:api                          # http://127.0.0.1:4000/health and /ready
 ```
 
-Tests cover the Money Engine, planning, Coming up, dashboard, insights, analytics, Money Health, Safe to Spend, business calculations and reports, search, typed capture, and the 12 data-consistency scenarios (in `src/data/integration.test.ts`): expense, income, transfer, budget use, part-settled receivable and payable, loan repayment, recurring in Coming up, goal contribution, Space isolation, edit and delete, and persistence after a refresh.
+In development the web app forwards `/api/*` to the API, so the browser never needs a cross-origin request.
 
-There are no secrets, API keys or environment variables.
+**Checks**
+
+```bash
+npm run lint       # Biome: lint and formatting (npm run format fixes what it can)
+npm run typecheck  # TypeScript, every package
+npm test           # 135 tests: money rules, the web store, and the API
+npm run build      # web app into apps/web/dist, API into apps/api/dist
+npm run check      # all of the above, as CI runs it
+```
+
+Tests cover the Money Engine, planning, Coming up, dashboard, insights, analytics, Money Health, Safe to Spend, business calculations and reports, search, typed capture, and the 12 data-consistency scenarios (in `apps/web/src/data/integration.test.ts`): expense, income, transfer, budget use, part-settled receivable and payable, loan repayment, recurring in Coming up, goal contribution, Space isolation, edit and delete, and persistence after a refresh. API tests run migrations and the health checks against PGlite, an in-memory build of real Postgres, so no database is needed to run them.
+
+**Automatic checks.** On every push to `main` and every pull request, GitHub Actions (`.github/workflows/ci.yml`) runs lint, type-checks, tests and both builds; applies the migrations to a real Postgres 18 twice (the second run must change nothing) and checks the API reaches it; and builds the API container. Dependabot proposes dependency updates weekly.
+
+**Lint rules switched off, and why:** non-null assertions (used deliberately after checks); assignment inside a condition (the `if ((m = text.match(…)))` idiom in the parsers); "use Math.min/max" (its automatic fix breaks date comparisons, because dates are compared as text); semantic-element suggestions (the custom radio and group controls use correct ARIA roles). Single exceptions are marked in the code with `biome-ignore` and a reason.
+
+Settings and environments are described in [docs/ENVIRONMENTS.md](docs/ENVIRONMENTS.md).
 
 ## 8. Known limitations
 
@@ -187,11 +226,12 @@ There are no secrets, API keys or environment variables.
 - **Spaces.** No transfers between Spaces. People belong to one Space. Splitting covers expenses you paid.
 - **Goals** are not tied to an account, so Finken cannot check the money is there.
 - **Business.** No inventory, payroll processing, tax, invoicing documents or double-entry accounting. Business Spaces created before Business Mode treat every category as operating until changed.
-- **Tests** cover logic and the store; there are no automated UI tests.
+- **Tests** cover logic, the store and the API foundation; there are no automated UI tests.
+- **API.** Foundation only: no money tables, endpoints or sign-in yet (Phase 2 of the production plan).
 
 ## 9. Suggested next steps for production development
 
-1. **Backend and real accounts.** Implement `StorageAdapter` and `AuthService` against a real backend (for example Firebase Auth and Firestore, or a Postgres API). Enforce per-user and per-Space access on the server, not only in the client.
+1. **Backend and real accounts.** Implement `StorageAdapter` and `AuthService` against the Postgres API in `apps/api`. Enforce per-user and per-Space access on the server, not only in the client.
 2. **Sync and conflicts.** Add server timestamps and a sync strategy for multiple devices; keep IndexedDB as an offline cache.
 3. **Server-side validation.** Run `checkTransaction` and the obligation rules on the server too; the domain modules are framework-free and can be shared.
 4. **Money precision.** Store amounts as integer minor units and add multi-currency support (exchange rates for All Spaces totals).
