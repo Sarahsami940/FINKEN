@@ -6,6 +6,7 @@ import type { ID, Transaction, TransactionType } from '@finken/domain/types';
 import { type FormEvent, useMemo, useState } from 'react';
 import { useAppState } from '../../data/hooks';
 import { store } from '../../data/store';
+import { track } from '../../data/usage';
 import { Button } from '../ui/Button';
 import { cn } from '../ui/cn';
 import { Field, Input, Select, Textarea } from '../ui/Field';
@@ -143,6 +144,7 @@ export function TransactionForm({ request, onClose }: TransactionFormProps) {
     const result = request.edit ? store.updateTransaction(request.edit.id, draft) : store.addTransaction(draft, requestId);
     if (!result.ok) return setError(result.error);
     nextRequest();
+    if (!editing && (type === 'expense' || type === 'income' || type === 'transfer')) track(`add:${type}`);
 
     const elsewhere = spaceId !== state.activeSpaceId && space ? ` in ${space.name}` : '';
     toast(editing ? 'Changes saved' : `${SAVED[type]}${elsewhere}`);

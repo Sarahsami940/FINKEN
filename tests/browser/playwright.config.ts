@@ -2,7 +2,8 @@
  * Finken in a real browser: the app as people use it, browser-only and with
  * an account, plus an accessibility scan of every main screen.
  *
- * Starts its own servers: the API on an in-memory Postgres, the web app in
+ * Starts its own servers: the API on an in-memory Postgres (invite-only, as
+ * the beta is), the web app in
  * browser-only mode, and the web app in account mode. Locally it uses the
  * Edge or Chrome already installed (FINKEN_BROWSER=chrome|msedge); in CI,
  * `npx playwright install chromium` provides one.
@@ -24,7 +25,15 @@ export default defineConfig({
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: { ...devices['Desktop Chrome'], baseURL: LOCAL_URL, channel, trace: 'retain-on-failure', screenshot: 'only-on-failure', timezoneId: 'Asia/Karachi', locale: 'en-GB' },
   webServer: [
-    { command: 'npm run dev:memory -w @finken/api', cwd: '../..', env: { PORT: String(API) }, url: `http://127.0.0.1:${API}/health`, reuseExistingServer: false, timeout: 120_000 },
+    // A closed beta, as in production: helpers.INVITE_CODE lets people in.
+    {
+      command: 'npm run dev:memory -w @finken/api',
+      cwd: '../..',
+      env: { PORT: String(API), BETA_ACCESS: 'invite', DEV_INVITE_CODE: 'FNK-TEST-2026' },
+      url: `http://127.0.0.1:${API}/health`,
+      reuseExistingServer: false,
+      timeout: 120_000,
+    },
     { command: 'npm run dev -w @finken/web -- --port 5191 --strictPort', cwd: '../..', url: LOCAL_URL, reuseExistingServer: false, timeout: 120_000 },
     // The built app, which has the service worker (offline use and reminders).
     {

@@ -27,6 +27,7 @@ The API reads these settings when it starts (`apps/api/src/config.ts`). It stops
 | `AUTH_JWKS_URL` | With `oidc` | none | The provider's public keys (https), for checking token signatures |
 | `AUTH_DEV_SECRET` | With `dev` | none | At least 32 characters. Development and tests only. |
 | `RATE_LIMIT_PER_MINUTE` | No | `300` | Requests each signed-in person may make per minute. Other limits are in [SECURITY.md](SECURITY.md). |
+| `BETA_ACCESS` | No | `invite` in staging and production, `open` otherwise | `invite`: only people with an invite code can keep records (the closed beta). `open`: anyone who signs in. Set `open` on launch day ([BETA.md](BETA.md)). |
 | `METRICS_TOKEN` | No | none | At least 32 characters. Outside development, `GET /metrics` exists only when this is set, and needs it as a bearer token. |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | For pushed reminders | none | The key pair that signs reminders sent to devices. Make one with `npx web-push generate-vapid-keys`, once per environment; changing it means every device must turn reminders on again. The private key is a secret. |
 | `VAPID_SUBJECT` | For pushed reminders | none | How push services can reach Finken about its messages: `mailto:…` or `https://…` |

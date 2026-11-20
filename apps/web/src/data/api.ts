@@ -39,10 +39,11 @@ export class ApiError extends Error {
 export class ApiClient {
   constructor(private options: ApiOptions) {}
 
-  async request<T>(method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: string, body?: unknown): Promise<T> {
+  async request<T>(method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: string, body?: unknown, options: { keepalive?: boolean } = {}): Promise<T> {
     const token = await this.options.token();
     const res = await (this.options.fetch ?? fetch)(`${this.options.baseUrl}${path}`, {
       method,
+      ...(options.keepalive ? { keepalive: true } : {}),
       headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
@@ -152,11 +153,15 @@ export class ApiStorage implements StorageAdapter {
   }
 }
 
-interface Me {
+export interface Me {
   id: ID;
   email: string | null;
   name: string;
   timeZone: string;
+  /** invite-needed while the beta is invite-only and no code has been entered. */
+  access?: 'member' | 'invite-needed';
+  /** Whether usage may be counted; null until asked. */
+  usage?: 'yes' | 'no' | null;
 }
 
 const toUser = (me: Me): User => ({ id: me.id, name: me.name, email: me.email ?? undefined, isGuest: false, timeZone: me.timeZone });
@@ -171,12 +176,16 @@ export class ApiAuthService implements AuthService {
     private api: ApiClient,
     /** Where the last known profile is kept, so Finken opens without a connection. */
     private local?: StorageAdapter,
+    /** Hears the beta and usage settings each time the profile is read. */
+    private onProfile?: (me: Me) => void,
   ) {}
 
   /** The signed-in user, or null when there is no valid token. */
   async current(): Promise<User | null> {
     try {
-      const user = toUser(await this.api.request<Me>('GET', '/v1/me'));
+      const me = await this.api.request<Me>('GET', '/v1/me');
+      this.onProfile?.(me);
+      const user = toUser(me);
       await this.local?.put('users', user);
       return user;
     } catch (err) {

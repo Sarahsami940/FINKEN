@@ -5,6 +5,8 @@ export const LOCAL_URL = 'http://localhost:5191';
 export const ACCOUNT_URL = 'http://localhost:5192';
 /** The built app, with its service worker. */
 export const BUILT_URL = 'http://localhost:5193';
+/** The test API is a closed beta; this code lets anyone in (see playwright.config.ts). */
+export const INVITE_CODE = 'FNK-TEST-2026';
 
 /** Reads "Rs. 2,665,000" or "Rs. 1,250.50" as paisa. */
 export function paisa(text: string): number {

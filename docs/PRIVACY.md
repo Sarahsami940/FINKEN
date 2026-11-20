@@ -16,6 +16,13 @@ What Finken keeps about people, why, for how long, and how they get a copy or ha
 | Devices that asked for reminders | `push_subscriptions` table | Sending the daily reminder. The browser's push address and encryption keys, removed when the person turns reminders off, logs out, deletes the account, or the push service says the device is gone |
 | When the last reminder went | `users` table | Sending at most one a day |
 | Metrics | Monitoring | Counts and timings by route, never by person |
+| Who is in each Space, and their role | `space_members` | Sharing a Space. Members see each other's names; only the owner sees members' emails |
+| Space invites | `space_invites`: a hash of the code, the role, who made it, and when it was used | Letting one person in. Removed with the Space or with the account that made it |
+| Beta invite | `users` table: when they joined and their wave. `beta_invites`: a hash of each code, never the code | Running the closed beta |
+| Feedback they send | `feedback` table: their words, the screen, the app version | Fixing what they report. The team reads it without their name or email |
+| Usage, only if they said yes | `usage_events` table: per day, how often each screen and feature was used | Seeing what to improve. Fixed event names only, never amounts, names, descriptions or anything typed |
+| Their answer about usage | `users` table | Asking only once |
+| People and errors per day | `daily_health` table: counts only, nobody named; `users.last_seen_on` so each person counts once a day | Knowing whether Finken is healthy enough to launch |
 
 **People they record** (a friend who owes them money, a supplier) are kept as names and optional phone numbers inside the person's own Space. They are never contacted by Finken and never shared.
 
@@ -28,6 +35,8 @@ Nothing is sold, used for advertising or shared with third parties beyond the si
 - **Data from before accounts** stays in the browser until they move it or remove it ("Remove moved Spaces from this browser").
 - **Correcting** anything is done in the app itself.
 - **Reminders** are off until the person turns them on (Settings → This device). They never contain amounts or names, because they can show on a locked screen. Reminder messages are encrypted for the device by the push service.
+- **Sharing a Space** is the owner's choice, one person at a time. Everyone in a Space sees all of its records. A member removed from a Space loses it on their devices at their next sync. Records they added stay in the Space, which belongs to its owner. When the owner deletes their account, the Space and everything in it go for every member.
+- **Usage sharing** is off until they say yes. They are asked once, on Home, and can change it any time in Settings → The Finken beta. Saying no deletes what was counted. Their feedback, usage counts and answer are in their download, and are deleted with their account.
 - **Imported files** are read on the device. Only the transactions the person chooses to import are saved; the file itself is never uploaded or kept.
 
 Deleting the Finken account does not delete the sign-in provider's account; the screens should link to it once the provider is chosen.
@@ -43,6 +52,9 @@ These are the proposed defaults. Each needs confirming (see [LEGAL-PAKISTAN.md](
 | Request and error logs | 30 days |
 | Metrics | 13 months, as counts only |
 | Deleted account ids | 35 days, then cleared by the nightly job |
+| Usage counts | 180 days, then deleted by the nightly job; at once if they say no |
+| Feedback | While the account exists |
+| People and errors per day | Indefinitely (counts only, nobody named) |
 | Account deletion dates and counts | Indefinitely (they hold no personal data) |
 
 If a backup is ever restored, accounts deleted since that backup was taken must be deleted again before the service reopens. The `account_deletions` table keeps the internal ids of the last 35 days for exactly that, and `restore.js` names any that came back ([OPERATIONS.md](OPERATIONS.md)).

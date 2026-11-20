@@ -1,19 +1,21 @@
 import { currentTimeZone, DEFAULT_TIME_ZONE, deviceTimeZone, isValidTimeZone } from '@finken/domain/dates';
 import { ArrowDownToLine, Bell, BellOff, Download, LogOut, MonitorSmartphone, RefreshCw, Trash2, UserRoundPlus } from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
+import { FeedbackButton, USAGE_EXPLAINED, useUsageChoice } from '../components/beta/Beta';
 import { Button } from '../components/ui/Button';
 import { Card, CardHeader } from '../components/ui/Card';
 import { Field, Input, Select } from '../components/ui/Field';
 import { Badge, PageHeader } from '../components/ui/Misc';
 import { ConfirmDialog, Modal } from '../components/ui/Modal';
 import { useToast } from '../components/ui/Toast';
-import { account } from '../data/account';
+import { account, useProfile } from '../data/account';
 import { useAppState } from '../data/hooks';
 import { installApp, usePwa } from '../data/pwa';
 import { turnOffReminders, turnOnReminders, useReminders } from '../data/reminders';
 import { leaveFinken, unsentChanges } from '../data/session';
 import { store } from '../data/store';
 import type { SyncStatus } from '../data/sync';
+import { track } from '../data/usage';
 import { PrototypeNotice, RegisterForm } from '../onboarding/AuthForms';
 import { MoveData } from '../onboarding/MoveData';
 import { BackLink } from './MoneyPages';
@@ -169,6 +171,34 @@ function formatTime(zone: string): string {
   return new Intl.DateTimeFormat('en-GB', { timeZone: zone, hour: '2-digit', minute: '2-digit', weekday: 'short' }).format(new Date());
 }
 
+/** The beta: whether usage is shared, and a way to send feedback. */
+function BetaCard() {
+  const profile = useProfile();
+  const { busy, choose } = useUsageChoice();
+  const sharing = profile?.usage === 'yes';
+  return (
+    <Card>
+      <CardHeader title="The Finken beta" subtitle="Finken is being tested with a small group before it opens to everyone. Your feedback decides what is fixed first." />
+      <div className="flex flex-col gap-3 border-b border-line pb-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h3 className="text-sm font-bold text-ink">Share usage</h3>
+          <p className="mt-0.5 text-[13px] leading-relaxed text-ink-3">{USAGE_EXPLAINED}</p>
+          <p role="status" className="mt-1.5 text-[13px] font-semibold text-ink-2">
+            {sharing ? 'On: usage is counted.' : profile?.usage === 'no' ? 'Off: nothing is counted.' : 'Off: you have not been asked yet.'}
+          </p>
+        </div>
+        <Button className="shrink-0" disabled={busy || !profile} onClick={() => void choose(!sharing)}>
+          {sharing ? 'Stop sharing' : 'Share usage'}
+        </Button>
+      </div>
+      <div className="flex flex-col gap-3 pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-[13px] leading-relaxed text-ink-3">Something wrong, missing or good? A person reads every message.</p>
+        <FeedbackButton className="shrink-0" />
+      </div>
+    </Card>
+  );
+}
+
 export function SettingsPage() {
   const { user, persistent, transactions, spaces } = useAppState();
   const toast = useToast();
@@ -198,6 +228,7 @@ export function SettingsPage() {
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       toast('Your data was saved to your downloads');
+      track('export:done');
     } catch (err) {
       toast((err as Error).message || 'Your data could not be downloaded. Try again.', { tone: 'error' });
     } finally {
@@ -330,6 +361,8 @@ export function SettingsPage() {
         </Card>
 
         <DeviceCard />
+
+        {account && <BetaCard />}
 
         {account && (
           <Card>

@@ -22,6 +22,12 @@ const Config = z
     RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(10).max(100_000).default(300),
     /** Needed to read GET /metrics outside development. Without it, /metrics does not exist there. */
     METRICS_TOKEN: z.string().min(32, 'must be at least 32 characters').optional(),
+    /**
+     * Who may keep records. invite: only people who entered an invite code
+     * (the closed beta). open: anyone who signs in. Defaults to invite in
+     * staging and production, open otherwise.
+     */
+    BETA_ACCESS: z.enum(['invite', 'open']).optional(),
     /** Reminders sent to devices (Web Push). Make a pair with: npx web-push generate-vapid-keys */
     VAPID_PUBLIC_KEY: z.string().min(40).optional(),
     VAPID_PRIVATE_KEY: z.string().min(20).optional(),

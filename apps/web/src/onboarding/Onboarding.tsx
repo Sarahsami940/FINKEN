@@ -289,6 +289,61 @@ function AccountSignIn({ account, onBack }: { account: Account; onBack: () => vo
   );
 }
 
+/** Signed in while the beta is invite-only: the invite code comes first. */
+export function InviteStep({ account }: { account: Account }) {
+  const { user } = useAppState();
+  const [code, setCode] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    const joined = await account.joinBeta(code);
+    setBusy(false);
+    if (!joined.ok) setError(joined.error);
+  }
+
+  return (
+    <Frame onBack={() => void leaveFinken()} backLabel="Sign out">
+      <Heading
+        title="Enter your invite code"
+        subtitle={`Finken is in a closed beta. You are signed in${user?.email ? ` as ${user.email}` : ''}; enter the code from your invitation to start.`}
+      />
+      <form onSubmit={submit} noValidate className="space-y-4">
+        <Field label="Invite code" hint="It looks like FNK-7KQM-2XHD. Capitals and dashes do not matter.">
+          {(id) => (
+            <Input
+              id={id}
+              autoComplete="off"
+              autoCapitalize="characters"
+              spellCheck={false}
+              maxLength={40}
+              value={code}
+              onChange={(e) => {
+                setCode(e.target.value);
+                if (error) setError(null);
+              }}
+            />
+          )}
+        </Field>
+        {error && (
+          <p role="alert" className="rounded-control bg-negative-soft px-3.5 py-2.5 text-sm font-semibold text-negative">
+            {error}
+          </p>
+        )}
+        <Button type="submit" variant="primary" size="lg" block disabled={busy || !code.trim()}>
+          {busy ? 'Checking…' : 'Join the beta'}
+        </Button>
+      </form>
+      <p className="mt-6 rounded-control bg-sunken px-3.5 py-3 text-[13px] leading-relaxed text-ink-2">
+        No code yet? Places open in small groups so every problem can be fixed quickly. Your account is kept, and you can download or delete it from here at any time by signing in.
+      </p>
+    </Frame>
+  );
+}
+
 /** Straight after signing in: offer to bring in what this browser saved before accounts. */
 export function MoveDataStep({ account, onDone }: { account: Account; onDone: (choice: 'moved' | 'later') => void }) {
   const { user } = useAppState();

@@ -2,11 +2,13 @@ import { parseISODate } from '@finken/domain/dates';
 import { SPACE_TYPE_META } from '@finken/domain/defaults';
 import { CURRENCIES, DEFAULT_CURRENCY } from '@finken/domain/format';
 import type { Space, SpaceType } from '@finken/domain/types';
-import { Archive, ArchiveRestore, Check, ChevronRight, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Archive, ArchiveRestore, Check, ChevronRight, Pencil, Plus, Trash2, Users } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { MORE_SECTIONS } from '../app/nav';
 import { SpaceGlyph } from '../app/SpaceSwitcher';
+import { FeedbackButton } from '../components/beta/Beta';
+import { JoinSpaceCard, ROLE_NAME, SpacePeopleDialog } from '../components/sharing/SpacePeople';
 import { Button, IconButton } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { cn } from '../components/ui/cn';
@@ -15,6 +17,7 @@ import { iconFor, SPACE_ICON_KEYS } from '../components/ui/icons';
 import { Badge, PageHeader } from '../components/ui/Misc';
 import { ConfirmDialog, Modal } from '../components/ui/Modal';
 import { useToast } from '../components/ui/Toast';
+import { account } from '../data/account';
 import { useAppState } from '../data/hooks';
 import { store } from '../data/store';
 import { BackLink } from './MoneyPages';
@@ -41,6 +44,15 @@ export function MorePage() {
           </Link>
         ))}
       </div>
+      {account && (
+        <div className="mt-6 flex flex-col items-start gap-3 rounded-card border border-line bg-surface p-4 shadow-card sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-[15px] font-bold text-ink">Finken is in beta</h2>
+            <p className="mt-0.5 text-[13px] leading-snug text-ink-3">Something wrong, missing or good? Tell the team; a person reads every message.</p>
+          </div>
+          <FeedbackButton />
+        </div>
+      )}
     </div>
   );
 }
@@ -170,10 +182,14 @@ function SpaceEditor({ space, onClose }: { space: Space | null; onClose: () => v
 }
 
 export function SpacesPage() {
-  const { spaces, activeSpaceId, transactions } = useAppState();
+  const { spaces, activeSpaceId, transactions, roles } = useAppState();
   const toast = useToast();
   const [editor, setEditor] = useState<{ space: Space | null } | null>(null);
   const [deleting, setDeleting] = useState<Space | null>(null);
+  const [people, setPeople] = useState<Space | null>(null);
+  const [params, setParams] = useSearchParams();
+  // An invite link opens this screen with the code filled in.
+  const joinCode = params.get('join') ?? '';
   const activeCount = spaces.filter((s) => s.status === 'active').length;
 
   function archive(space: Space, archived: boolean) {
@@ -201,12 +217,29 @@ export function SpacesPage() {
         }
       />
 
+      {account && (
+        <div className="mb-4">
+          <JoinSpaceCard
+            key={joinCode}
+            initialCode={joinCode}
+            onJoined={async (spaceId) => {
+              if (joinCode) setParams({}, { replace: true });
+              // Its records have just arrived: show the Space straight away.
+              await store.refresh();
+              store.setActiveSpace(spaceId);
+            }}
+          />
+        </div>
+      )}
+
       <ul className="grid gap-3 md:grid-cols-2">
         {spaces.map((space) => {
           const current = space.id === activeSpaceId;
           const archived = space.status === 'archived';
           const count = transactions.filter((t) => t.spaceId === space.id).length;
           const lastActive = !archived && activeCount === 1;
+          const role = roles[space.id] ?? 'owner';
+          const owner = role === 'owner';
           return (
             <li key={space.id}>
               <Card className={cn('flex h-full flex-col !p-5', current && 'border-accent ring-3 ring-accent/10', archived && 'opacity-75')}>
@@ -217,6 +250,7 @@ export function SpacesPage() {
                       <h2 className="truncate text-base font-bold text-ink">{space.name}</h2>
                       {current && <Badge tone="accent">Current</Badge>}
                       {archived && <Badge>Archived</Badge>}
+                      {!owner && <Badge tone={role === 'viewer' ? 'warning' : 'neutral'}>Shared with you · {ROLE_NAME[role]}</Badge>}
                     </div>
                     <p className="mt-0.5 text-[13px] text-ink-3">
                       {SPACE_TYPE_META[space.type].label} · {space.currency} · {count} {count === 1 ? 'transaction' : 'transactions'}
@@ -248,10 +282,17 @@ export function SpacesPage() {
                     </Button>
                   )}
                   <span className="flex-1" />
-                  <IconButton label={`Edit ${space.name}`} onClick={() => setEditor({ space })}>
-                    <Pencil className="size-4" />
-                  </IconButton>
-                  {!archived && (
+                  {account && (
+                    <IconButton label={owner ? `Share ${space.name}` : `People in ${space.name}`} onClick={() => setPeople(space)}>
+                      <Users className="size-4" />
+                    </IconButton>
+                  )}
+                  {role !== 'viewer' && (
+                    <IconButton label={`Edit ${space.name}`} onClick={() => setEditor({ space })}>
+                      <Pencil className="size-4" />
+                    </IconButton>
+                  )}
+                  {owner && !archived && (
                     <IconButton
                       label={lastActive ? 'Your only active Space cannot be archived' : `Archive ${space.name}`}
                       disabled={lastActive}
@@ -260,14 +301,16 @@ export function SpacesPage() {
                       <Archive className="size-4" />
                     </IconButton>
                   )}
-                  <IconButton
-                    label={lastActive ? 'Your only active Space cannot be deleted' : `Delete ${space.name}`}
-                    disabled={lastActive}
-                    onClick={() => setDeleting(space)}
-                    className="hover:bg-negative-soft hover:text-negative"
-                  >
-                    <Trash2 className="size-4" />
-                  </IconButton>
+                  {owner && (
+                    <IconButton
+                      label={lastActive ? 'Your only active Space cannot be deleted' : `Delete ${space.name}`}
+                      disabled={lastActive}
+                      onClick={() => setDeleting(space)}
+                      className="hover:bg-negative-soft hover:text-negative"
+                    >
+                      <Trash2 className="size-4" />
+                    </IconButton>
+                  )}
                 </div>
               </Card>
             </li>
@@ -276,6 +319,7 @@ export function SpacesPage() {
       </ul>
 
       {editor && <SpaceEditor key={editor.space?.id ?? 'new'} space={editor.space} onClose={() => setEditor(null)} />}
+      {people && <SpacePeopleDialog space={people} onClose={() => setPeople(null)} />}
       <ConfirmDialog
         open={Boolean(deleting)}
         title={`Delete ${deleting?.name ?? 'Space'}?`}

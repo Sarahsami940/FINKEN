@@ -26,8 +26,12 @@ function serviceWorker(): Plugin {
   };
 }
 
+const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string };
+
 export default defineConfig({
   plugins: [react(), tailwindcss(), serviceWorker()],
+  // Which release sent a piece of feedback or an error: the package version, or FINKEN_RELEASE when CI sets one.
+  define: { __FINKEN_RELEASE__: JSON.stringify(process.env.FINKEN_RELEASE ?? pkg.version) },
   server: {
     port: 5173,
     strictPort: false,

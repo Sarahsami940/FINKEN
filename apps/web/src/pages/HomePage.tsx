@@ -11,6 +11,7 @@ import { daysFrom, expectedEvents, expectedTotals } from '@finken/domain/upcomin
 import { BriefcaseBusiness, CalendarClock, CalendarDays, ChevronRight, Handshake, Inbox, PiggyBank, Plus, Sun, Target } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { UsageQuestion } from '../components/beta/Beta';
 import { DonutChart } from '../components/charts/DonutChart';
 import { FlowBars } from '../components/charts/FlowBars';
 import { useAddFlow } from '../components/money/AddFlow';
@@ -145,6 +146,7 @@ export function HomePage() {
 
   return (
     <div>
+      <UsageQuestion className="mb-5" />
       <header className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-medium text-ink-3">{formatFullDate(now)}</p>

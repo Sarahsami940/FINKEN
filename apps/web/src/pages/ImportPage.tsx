@@ -24,6 +24,7 @@ import { Badge, PageHeader } from '../components/ui/Misc';
 import { useToast } from '../components/ui/Toast';
 import { useAppState } from '../data/hooks';
 import { store } from '../data/store';
+import { track } from '../data/usage';
 import { BackLink } from './MoneyPages';
 
 /** Lines shown in the preview; all of them are imported. */
@@ -143,6 +144,7 @@ export function ImportPage() {
     if (!result.ok) return setError(result.error);
     setDone({ added: result.added, skipped: result.skipped, account: account.name });
     toast(`${result.added} ${result.added === 1 ? 'transaction' : 'transactions'} imported`);
+    track('import:done');
     setFile(null);
   }
 

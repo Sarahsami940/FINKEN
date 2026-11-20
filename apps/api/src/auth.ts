@@ -15,6 +15,12 @@ export interface AuthUser {
   email: string | null;
   name: string;
   timeZone: string;
+  /** Entered an invite code (only matters while the beta is invite-only). */
+  joinedBeta: boolean;
+  /** Said yes or no to sharing usage; null until asked. */
+  usage: 'yes' | 'no' | null;
+  /** Already counted among today's people (daily_health). */
+  seenToday: boolean;
 }
 
 export type Verifier = (token: string) => Promise<Identity>;
@@ -59,17 +65,19 @@ export function devToken(secret: string, identity: Identity, expiresIn = '1h'): 
 
 /** Finds the Finken user for a provider identity, creating them on their first request. */
 export async function userFor(db: Db, identity: Identity): Promise<AuthUser> {
-  type Row = { id: string; email: string | null; name: string; time_zone: string };
-  const find = () => db.query<Row>('select id, email, name, time_zone from users where auth_subject = $1', [identity.subject]);
+  type Row = { id: string; email: string | null; name: string; time_zone: string; joined: boolean; usage: 'yes' | 'no' | null; seen: boolean };
+  const COLUMNS = `id, email, name, time_zone, beta_joined_at is not null as joined, usage_consent as usage,
+    coalesce(last_seen_on = (now() at time zone 'utc')::date, false) as seen`;
+  const find = () => db.query<Row>(`select ${COLUMNS} from users where auth_subject = $1`, [identity.subject]);
   let [row] = await find();
   if (!row) {
     // Two first requests at once both try; the loser finds the winner's row.
     [row] = await db.query<Row>(
       `insert into users (id, auth_subject, email, name) values ($1, $2, $3, $4)
-       on conflict (auth_subject) do nothing returning id, email, name, time_zone`,
+       on conflict (auth_subject) do nothing returning ${COLUMNS}`,
       [crypto.randomUUID(), identity.subject, identity.email ?? null, identity.name ?? ''],
     );
     row ??= (await find())[0];
   }
-  return { id: row.id, email: row.email, name: row.name, timeZone: row.time_zone };
+  return { id: row.id, email: row.email, name: row.name, timeZone: row.time_zone, joinedBeta: row.joined, usage: row.usage, seenToday: row.seen };
 }

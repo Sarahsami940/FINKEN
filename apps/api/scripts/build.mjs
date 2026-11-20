@@ -3,7 +3,7 @@
 import { build } from 'esbuild';
 
 await build({
-  entryPoints: ['src/server.ts', 'src/migrate.ts', 'src/reconcile.ts', 'src/restore.ts', 'src/push.ts'],
+  entryPoints: ['src/server.ts', 'src/migrate.ts', 'src/reconcile.ts', 'src/restore.ts', 'src/push.ts', 'src/beta.ts'],
   outdir: 'dist',
   bundle: true,
   platform: 'node',

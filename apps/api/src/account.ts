@@ -40,6 +40,15 @@ export async function exportAccount(db: Db, user: AuthUser, now = new Date()) {
     `select to_char(created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as created_at, endpoint from push_subscriptions where user_id = $1 order by id`,
     [user.id],
   );
+  // What they told us, and what was counted with their consent.
+  const feedback = await db.query<{ at: string; kind: string; message: string; screen: string; status: string }>(
+    `select to_char(created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as at, kind, message, screen, status from feedback where user_id = $1 order by id`,
+    [user.id],
+  );
+  const usage = await db.query<{ day: string; event: string; n: number }>(
+    `select to_char(day, 'YYYY-MM-DD') as day, event, n from usage_events where user_id = $1 order by day, event`,
+    [user.id],
+  );
   return {
     format: 'finken-export',
     version: 1,
@@ -47,6 +56,9 @@ export async function exportAccount(db: Db, user: AuthUser, now = new Date()) {
     profile: { id: user.id, email: user.email, name: user.name, timeZone: user.timeZone, createdAt: profile?.created_at },
     memberships: members.map((m) => ({ spaceId: m.space_id, role: m.role })),
     reminderDevices: devices.map((d) => ({ since: d.created_at, service: new URL(d.endpoint).hostname })),
+    usageSharing: user.usage,
+    feedback,
+    usage,
     records,
   };
 }

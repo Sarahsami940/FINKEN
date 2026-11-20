@@ -50,7 +50,7 @@ Run it once a night with the host's scheduler, with the API's environment. It ch
 
 It prints one JSON line (`"msg":"reconciliation"`) with counts and up to 100 problems by id, never contents, and exits `1` if anything is wrong. In a healthy database it finds nothing, because every save already passes these rules.
 
-It also forgets whose deleted accounts were once backups no longer hold them (35 days; see [PRIVACY.md](PRIVACY.md)).
+It also forgets whose deleted accounts were once backups no longer hold them (35 days; see [PRIVACY.md](PRIVACY.md)), deletes usage counts older than 180 days, and records the run in `reconciliation_runs`. The launch report checks that table to see the job ran every night ([BETA.md](BETA.md)).
 
 **If it finds something:** nothing is changed automatically. Look up the ids, work out how the record got there (a bug in a release, a manual change in the database), fix the cause, then fix the records through the app or with a reviewed SQL change.
 

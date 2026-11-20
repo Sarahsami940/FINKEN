@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { totalBalance } from '@finken/domain/money';
 import type { Account, Transaction } from '@finken/domain/types';
 import { forgetOldDeletions } from './account';
+import { forgetOldUsage, recordReconciliation } from './beta';
 import { COLLECTION_NAMES, COLLECTIONS, type CollectionName } from './collections';
 import { loadConfig } from './config';
 import { connect, type Db } from './db';
@@ -103,8 +104,13 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     const report = await reconcile(db);
     // The nightly job's one write: forgetting whose deleted accounts were, once backups no longer hold them.
     const forgotten = await forgetOldDeletions(db);
+    // Kept for the launch report; usage counts past their time are dropped.
+    await recordReconciliation(db, report);
+    const usageDropped = await forgetOldUsage(db);
     // One line a log search or alert can match: counts and ids only.
-    console.log(JSON.stringify({ msg: 'reconciliation', ...report, problems: report.problems.length, details: report.problems.slice(0, 100), forgottenDeletions: forgotten }));
+    console.log(
+      JSON.stringify({ msg: 'reconciliation', ...report, problems: report.problems.length, details: report.problems.slice(0, 100), forgottenDeletions: forgotten, usageDropped }),
+    );
     process.exitCode = report.problems.length ? 1 : 0;
   } finally {
     await db.close();

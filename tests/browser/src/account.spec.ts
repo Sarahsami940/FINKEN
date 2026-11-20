@@ -5,7 +5,7 @@
  */
 import { readFile } from 'node:fs/promises';
 import { expect, type Page, test } from '@playwright/test';
-import { ACCOUNT_URL, availableMoney, paisa } from './helpers';
+import { ACCOUNT_URL, availableMoney, INVITE_CODE, paisa } from './helpers';
 
 /** What a guest saved in this browser before accounts: one Space, an account and an expense. */
 async function plantBrowserData(page: Page) {
@@ -56,6 +56,9 @@ async function signIn(page: Page, email: string) {
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Your name').fill('Dana');
   await page.getByRole('button', { name: 'Sign in' }).click();
+  // The beta is invite-only: a new account enters the code once.
+  await page.getByLabel('Invite code').fill(INVITE_CODE);
+  await page.getByRole('button', { name: 'Join the beta' }).click();
 }
 
 test('moves browser data into the account, then exports and deletes the account', async ({ page }) => {

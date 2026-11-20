@@ -4,6 +4,7 @@
  * Only in the built app; during development every load is fresh.
  */
 import { useSyncExternalStore } from 'react';
+import { track } from './usage';
 
 interface InstallPrompt extends Event {
   prompt(): Promise<void>;
@@ -106,5 +107,6 @@ export async function installApp(): Promise<boolean> {
   const { outcome } = await installPrompt.userChoice;
   installPrompt = null;
   set({ canInstall: false, installed: outcome === 'accepted' || state.installed });
+  if (outcome === 'accepted') track('install:done');
   return outcome === 'accepted';
 }

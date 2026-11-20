@@ -243,7 +243,7 @@ Tests cover the Money Engine, planning, Coming up, dashboard, insights, analytic
 **Browser, accessibility and load tests**
 
 ```bash
-npm run test:browser         # Playwright: the money and account flows, and axe scans of 27 screens (uses the installed Edge or Chrome)
+npm run test:browser         # Playwright: the money, account and beta flows, and axe scans of 30 screens (uses the installed Edge or Chrome)
 npm run load -w @finken/e2e  # 20 people at once; checks every expense arrives exactly once and every balance matches
 ```
 
@@ -253,7 +253,9 @@ npm run load -w @finken/e2e  # 20 people at once; checks every expense arrives e
 - [docs/SECURITY.md](docs/SECURITY.md): threats, protections and tests;
 - [docs/PRIVACY.md](docs/PRIVACY.md): what is kept, for how long, export and deletion;
 - [docs/OPERATIONS.md](docs/OPERATIONS.md): monitoring, the nightly check, backups and restores, load testing;
-- [docs/LEGAL-PAKISTAN.md](docs/LEGAL-PAKISTAN.md): questions for a lawyer before launch.
+- [docs/LEGAL-PAKISTAN.md](docs/LEGAL-PAKISTAN.md): questions for a lawyer before launch;
+- [docs/BETA.md](docs/BETA.md): the closed beta, invite codes, feedback and the launch gates;
+- [docs/BUSINESS.md](docs/BUSINESS.md): Business Mode, sharing a Space, and the reports.
 
 ## 8. Known limitations
 

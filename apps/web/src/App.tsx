@@ -3,12 +3,13 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell } from './app/AppShell';
 import { AddFlowProvider } from './components/money/AddFlow';
 import { ToastProvider } from './components/ui/Toast';
-import { account } from './data/account';
+import { account, useProfile } from './data/account';
 import { useAppState } from './data/hooks';
 import { startReminders } from './data/reminders';
 import { store } from './data/store';
+import { track } from './data/usage';
 import { useLocalSpaces } from './onboarding/MoveData';
-import { FirstSpaceStep, MoveDataStep, Onboarding } from './onboarding/Onboarding';
+import { FirstSpaceStep, InviteStep, MoveDataStep, Onboarding } from './onboarding/Onboarding';
 import { HomePage } from './pages/HomePage';
 import { MoneyPage } from './pages/MoneyPages';
 import { MorePage, SpacesPage } from './pages/MorePages';
@@ -45,6 +46,7 @@ function Loading() {
 
 export function App() {
   const { ready, user, spaces } = useAppState();
+  const profile = useProfile();
 
   const local = useLocalSpaces(account);
   const [moveClosed, setMoveClosed] = useState(false);
@@ -53,12 +55,15 @@ export function App() {
     void store.init().then(() => {
       if (store.getState().user) account?.start();
       startReminders(store.getState);
+      track('app:open');
     });
   }, []);
 
   if (!ready || !local.spaces) return <Loading />;
   // Nobody has entered yet: welcome, sign-up, login or guest.
   if (!user) return <Onboarding />;
+  // The closed beta: signed in, but the invite code comes before anything else.
+  if (account && profile?.access === 'invite-needed') return <InviteStep account={account} />;
   // Signed in to an account, with data saved in this browser from before: offer to bring it in.
   if (account && !moveClosed && !account.moveDismissed(user.id) && local.spaces.some((s) => !s.moved)) {
     return (

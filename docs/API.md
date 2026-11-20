@@ -17,8 +17,11 @@ A user record is created the first time a new provider identity calls the API. T
 | --- | --- |
 | `GET /health` | The process is running. No sign-in. |
 | `GET /ready` | The database can be reached (`503` if not). No sign-in. |
-| `GET /v1/me` | The signed-in user: `id`, `email`, `name`, `timeZone`. |
-| `PATCH /v1/me` | Change `name` or `timeZone` (an IANA name such as `Asia/Karachi`). |
+| `GET /v1/me` | The signed-in user: `id`, `email`, `name`, `timeZone`, `access` (`member`, or `invite-needed` in a closed beta) and `usage` (`yes`, `no`, or `null` until asked). |
+| `PATCH /v1/me` | Change `name`, `timeZone` (an IANA name such as `Asia/Karachi`) or `usage` (`true`/`false`; `false` deletes what was counted). |
+| `POST /v1/beta/join` | `{"code"}`: joins the closed beta with an invite code. Wrong, used-up, revoked and expired codes all get the same answer; 10 tries an hour ([BETA.md](BETA.md)). |
+| `POST /v1/feedback` | `{"kind": "problem" \| "idea" \| "praise", "message", "screen"?, "release"?}`: feedback in the person's words (10 an hour). |
+| `POST /v1/usage` | `{"events": [{"name", "n"}]}`: usage counts. Kept only for people who said yes, and only names from `@finken/domain/usage`; anything else is dropped. |
 | `GET /v1/records/:collection` | Every live record of one kind in the user's Spaces. |
 | `POST /v1/records/:collection/get` | `{"ids": [...]}`: those records, deleted ones included, from the user's Spaces only. |
 | `POST /v1/batch` | Saves and deletes, all or nothing. See below. |
@@ -29,7 +32,15 @@ A user record is created the first time a new provider identity calls the API. T
 | `GET /v1/push/key` | The public key a device needs to ask for reminders. `404` when the server sends none (no VAPID keys). |
 | `POST /v1/push/subscriptions` | `{"endpoint", "keys": {"p256dh", "auth"}}` from the browser's push subscription. Only the real push services are accepted (Google, Mozilla, Microsoft, Apple). |
 | `DELETE /v1/push/subscriptions` | `{"endpoint"}`: this device no longer wants reminders. |
+| `GET /v1/spaces/:id/members` | Who is in the Space and their role. Any member may ask; only the owner sees other people's emails. |
+| `PATCH /v1/spaces/:id/members/:userId` | `{"role": "editor" \| "viewer"}`: the owner changes what someone may do. |
+| `DELETE /v1/spaces/:id/members/:userId` | The owner removes someone, or a member leaves (their own id). The owner cannot leave. |
+| `POST /v1/spaces/:id/invites` | `{"role"}`: the owner makes a one-person invite. Returns the code (`SPC-XXXX-XXXX`) once; it works for 7 days. |
+| `GET /v1/spaces/:id/invites`, `DELETE /v1/spaces/:id/invites/:inviteId` | The owner's invites still waiting, and cancelling one. |
+| `POST /v1/spaces/join` | `{"code"}`: joins the Space. Wrong, used, cancelled and expired codes all get the same answer; 10 tries an hour. |
 | `GET /v1/changes?since=N` | Everything changed in the user's Spaces after change number `N`, deletes included, with the next `cursor`. For sync. |
+
+**In a closed beta** (`BETA_ACCESS=invite`): someone who has not entered an invite code gets `403` with `"code": "invite_needed"` from everything except their profile, export, account deletion, joining, feedback, error reports and removing a reminder device.
 
 Collections: `spaces`, `accounts`, `categories`, `people`, `obligations`, `recurring`, `transactions`, `budgets`, `goals`, `goalEntries`. Records have the shapes in `packages/domain/src/types.ts`, with money in whole paisa. Each also carries `createdAt`, `createdBy`, `updatedAt`, `updatedBy`, `version` and, once deleted, `deletedAt` and `deletedBy`.
 
@@ -107,6 +118,18 @@ In account mode, the account's own offline copy lives in a separate browser data
 - kinds, types and statuses are one of the known values;
 - a transfer has a destination and only a transfer does, and a refund points at the expense it refunds;
 - every link (account, category, person, loan, refund, recurring item, goal) points at a record in the **same Space**. This uses composite foreign keys on `(space_id, id)`, checked at commit, so a batch can save records that point at each other in any order.
+
+## Sharing a Space
+
+A Space can be shared: a business with staff and an accountant, or a family. Each member has one role:
+
+| Role | Can |
+| --- | --- |
+| Owner | Everything: records, the Space itself, deleting it, and who is in it. One per Space, and it never changes. |
+| Editor ("can edit") | Add and change every kind of record, and rename the Space. Not delete it, and not manage people. |
+| Viewer ("can view") | See every record and report. Nothing else: every save is refused (`403`). |
+
+**Joining** gives every record in the Space a new change number, so the new member's devices receive the Space's whole history through the ordinary change feed, however far they had already synced. Every page of `GET /v1/changes` also carries `memberships` (each Space and the person's role). Devices use it to show who may do what, and to remove a Space someone has left or been removed from, along with its records.
 
 ## Permissions
 

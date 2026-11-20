@@ -15,6 +15,9 @@ Finken holds a person's whole financial picture: balances, spending, debts, who 
 | Leaks through logs and errors | Amounts, emails or stack traces in a log or error page | Log lines carry only ids, routes, status and timing. Server errors return a fixed message and a request id; the details stay in the log. |
 | Injection | SQL in an id or a description | Every query uses parameters; tested with hostile ids and names. |
 | Losing data | A bad release, a deleted table, a failed disk | Soft delete with change history on every record. Nightly reconciliation. Backups with a tested restore drill ([OPERATIONS.md](OPERATIONS.md)). |
+| A member doing more than their role allows | A viewer's modified app sending a save, an editor deleting the Space | Roles are checked on the server for every record in every batch. Only the owner deletes a Space or manages people, and the owner's role can't be changed. Tested for every kind of record ([API.md](API.md)). |
+| Joining someone's Space uninvited | Guessing or reusing a Space invite | One-person codes, valid for 7 days, stored only as hashes. One answer for every bad code, and 10 tries an hour. |
+| Joining the closed beta without an invite | Guessing or reusing codes | Codes carry 40 bits of chance and only their hashes are stored. Wrong codes get one answer and 10 tries an hour. Without an invite the API refuses every record read and write. ([BETA.md](BETA.md)) |
 | The browser copy | A shared or stolen computer | The account's offline copy is cleared on logging out. Browser data from before accounts can only be moved after the password of the local account that made it. |
 
 ## Controls in place
@@ -34,6 +37,10 @@ Finken holds a person's whole financial picture: balances, spending, debts, who 
 | Saves (`/v1/batch`) | 120 | user id |
 | Data exports | 10 an hour | user id |
 | Error reports from the app | 20 | user id |
+| Invite codes (`/v1/beta/join`) | 10 an hour | user id |
+| Space invite codes (`/v1/spaces/join`) | 10 an hour | user id |
+| Feedback | 10 an hour | user id |
+| Usage counts | 30 | user id |
 
 **Pushed reminders** go only to addresses at the real push services (`fcm.googleapis.com`, `updates.push.services.mozilla.com`, `*.notify.windows.com`, `*.push.apple.com`). Anything else is refused when a device registers, so nobody can make Finken's server send requests to an address of their choosing. Messages are signed with the VAPID key and encrypted for the device.
 

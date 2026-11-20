@@ -46,7 +46,7 @@ import type {
 } from '@finken/domain/types';
 import { account } from './account';
 import { AuthError, type AuthService, GUEST_ID, LocalAuthService, type RegistrationInput } from './auth';
-import { AuditedStorage, type CollectionName, createStorage, type Entity, type StorageAdapter } from './storage';
+import { AuditedStorage, type CollectionName, createStorage, type Entity, type SpaceRole, type StorageAdapter } from './storage';
 
 export interface AppState {
   ready: boolean;
@@ -55,8 +55,10 @@ export interface AppState {
   error: string | null;
   /** The current session's user, or null when nobody has entered Finken yet. */
   user: User | null;
-  /** Spaces owned by the current user. */
+  /** Spaces the current user owns or, with an account, belongs to. */
   spaces: Space[];
+  /** With an account: the user's role in each Space. Spaces missing here are theirs (owner). */
+  roles: Record<ID, SpaceRole>;
   accounts: Account[];
   categories: Category[];
   transactions: Transaction[];
@@ -86,6 +88,7 @@ const INITIAL: AppState = {
   error: null,
   user: null,
   spaces: [],
+  roles: {},
   accounts: [],
   categories: [],
   transactions: [],
@@ -98,6 +101,9 @@ const INITIAL: AppState = {
   activeSpaceId: null,
   guestNoticeDismissed: false,
 };
+
+/** What a change in a view-only Space is told. */
+export const VIEW_ONLY = 'You can view this Space but not change it. Ask its owner to let you edit.';
 
 const META_SESSION = 'sessionUserId';
 const META_GUEST_NOTICE = 'guestNoticeDismissed';
@@ -120,6 +126,8 @@ export class AppStore {
   /** Spaces that belong to users other than the current one. */
   private otherSpaces: Space[] = [];
   private meta = new Map<string, string>();
+  /** With an account: roles from the server (null before the first sync). */
+  private roles: Record<ID, SpaceRole> | null = null;
 
   /** Pass a storage adapter to run against something other than this browser's IndexedDB (tests do). */
   /**
@@ -200,6 +208,7 @@ export class AppStore {
         this.storage.getAll<MetaRecord>('meta'),
       ]);
       this.meta = new Map(meta.map((m) => [m.id, m.value]));
+      this.roles = (await this.storage.memberships?.()) ?? null;
 
       // Spaces saved before accounts existed have no owner: they were the guest's.
       const orphans = spaces.filter((s) => !s.ownerId);
@@ -226,6 +235,11 @@ export class AppStore {
     }
   }
 
+  /** Reads everything again (after joining a shared Space, say), and resolves once it is in view. */
+  async refresh(): Promise<void> {
+    await this.reloadRecords();
+  }
+
   /** Reads every record again from storage, keeping the session and the Space in view. */
   private async reloadRecords() {
     if (!this.state.ready) return;
@@ -242,6 +256,7 @@ export class AppStore {
         this.storage.getAll<Goal>('goals'),
         this.storage.getAll<GoalEntry>('goalEntries'),
       ]);
+      this.roles = (await this.storage.memberships?.()) ?? null;
       const active = this.state.activeSpaceId;
       this.otherSpaces = spaces;
       this.state = { ...this.state, spaces: [] };
@@ -262,11 +277,13 @@ export class AppStore {
     }
     setTimeZone(user?.timeZone);
     const all = [...this.state.spaces, ...this.otherSpaces];
-    const owned = sortSpaces(all.filter((s) => user && s.ownerId === user.id));
-    this.otherSpaces = all.filter((s) => !user || s.ownerId !== user.id);
+    // With an account, this device's copy holds only Spaces the person belongs to, shared ones included.
+    const mine = (s: Space) => Boolean(user) && (s.ownerId === user!.id || (Boolean(this.storage.memberships) && !user!.isGuest));
+    const owned = sortSpaces(all.filter(mine));
+    this.otherSpaces = all.filter((s) => !mine(s));
     const saved = user ? this.meta.get(activeSpaceKey(user.id)) : undefined;
     const active = owned.find((s) => s.id === saved && s.status === 'active') ?? owned.find((s) => s.status === 'active');
-    this.set({ user, spaces: owned, activeSpaceId: active?.id ?? null });
+    this.set({ user, spaces: owned, roles: this.roles ?? {}, activeSpaceId: active?.id ?? null });
   }
 
   private startSession(user: User) {
@@ -516,6 +533,7 @@ export class AppStore {
   private check(draft: TransactionDraft, editingId?: ID): string | null {
     // Transactions must belong to a Space the current user owns.
     if (!this.state.spaces.some((sp) => sp.id === draft.spaceId)) return 'That Space no longer exists.';
+    if (!this.canEdit(draft.spaceId)) return VIEW_ONLY;
     const { accounts, categories, transactions, obligations } = this.state;
     return checkTransaction(draft, { accounts, categories, transactions, obligations }, editingId);
   }
@@ -544,6 +562,7 @@ export class AppStore {
   ): Result<{ added: number; skipped: number }> {
     const space = this.state.spaces.find((sp) => sp.id === spaceId);
     if (!space) return { ok: false, error: 'That Space no longer exists.' };
+    if (!this.canEdit(spaceId)) return { ok: false, error: VIEW_ONLY };
     if (lines.length > MAX_IMPORT_ROWS) return { ok: false, error: `Import at most ${MAX_IMPORT_ROWS.toLocaleString('en')} lines at a time. Split the file and import each part.` };
     const have = new Set(this.state.transactions.map((t) => t.id));
     const now = stamp();
@@ -623,6 +642,7 @@ export class AppStore {
   setTransactionNotes(id: ID, notes: string): Result {
     const current = this.state.transactions.find((t) => t.id === id);
     if (!current || !this.ownsSpace(current.spaceId)) return { ok: false, error: 'That transaction no longer exists.' };
+    if (!this.canEdit(current.spaceId)) return { ok: false, error: VIEW_ONLY };
     const transaction: Transaction = { ...current, notes: notes.trim() || undefined, updatedAt: stamp() };
     this.set({ transactions: this.state.transactions.map((t) => (t.id === id ? transaction : t)) });
     this.save('transactions', transaction);
@@ -660,6 +680,16 @@ export class AppStore {
     return this.state.spaces.some((sp) => sp.id === spaceId);
   }
 
+  /** The user's role in a Space: owner unless an account says otherwise. */
+  roleIn(spaceId: ID | null | undefined): SpaceRole {
+    return (spaceId && this.state.roles[spaceId]) || 'owner';
+  }
+
+  /** False in a Space the user may only view. */
+  canEdit(spaceId: ID | null | undefined): boolean {
+    return this.roleIn(spaceId) !== 'viewer';
+  }
+
   private accountNameError(spaceId: ID, name: string, exceptId?: ID): string | null {
     if (!name) return 'Give this account a name.';
     const taken = this.state.accounts.some((acc) => acc.spaceId === spaceId && acc.id !== exceptId && acc.name.toLowerCase() === name.toLowerCase());
@@ -668,6 +698,7 @@ export class AppStore {
 
   addAccount(spaceId: ID, draft: AccountDraft): Result<{ account: Account }> {
     if (!this.ownsSpace(spaceId)) return { ok: false, error: 'That Space no longer exists.' };
+    if (!this.canEdit(spaceId)) return { ok: false, error: VIEW_ONLY };
     const name = draft.name.trim();
     const error = this.accountNameError(spaceId, name);
     if (error) return { ok: false, error };
@@ -681,6 +712,7 @@ export class AppStore {
   updateAccount(id: ID, draft: AccountDraft): Result {
     const current = this.state.accounts.find((acc) => acc.id === id);
     if (!current || !this.ownsSpace(current.spaceId)) return { ok: false, error: 'That account no longer exists.' };
+    if (!this.canEdit(current.spaceId)) return { ok: false, error: VIEW_ONLY };
     const name = draft.name.trim();
     const error = this.accountNameError(current.spaceId, name, id);
     if (error) return { ok: false, error };
@@ -703,6 +735,7 @@ export class AppStore {
   setAccountArchived(id: ID, archived: boolean): Result {
     const current = this.state.accounts.find((acc) => acc.id === id);
     if (!current || !this.ownsSpace(current.spaceId)) return { ok: false, error: 'That account no longer exists.' };
+    if (!this.canEdit(current.spaceId)) return { ok: false, error: VIEW_ONLY };
     if (archived && this.isLastActiveAccount(current)) return { ok: false, error: 'Keep at least one account in this Space.' };
     if (archived && this.state.recurring.some((r) => r.accountId === id && r.status === 'active')) {
       return { ok: false, error: 'An upcoming payment still uses this account.' };
@@ -717,6 +750,7 @@ export class AppStore {
   deleteAccount(id: ID): Result {
     const current = this.state.accounts.find((acc) => acc.id === id);
     if (!current || !this.ownsSpace(current.spaceId)) return { ok: false, error: 'That account no longer exists.' };
+    if (!this.canEdit(current.spaceId)) return { ok: false, error: VIEW_ONLY };
     if (this.accountInUse(id)) return { ok: false, error: 'This account has transactions. Archive it instead.' };
     if (!current.archived && this.isLastActiveAccount(current)) return { ok: false, error: 'Keep at least one account in this Space.' };
     this.set({ accounts: this.state.accounts.filter((acc) => acc.id !== id) });
@@ -742,6 +776,7 @@ export class AppStore {
 
   addCategory(spaceId: ID, draft: CategoryDraft): Result<{ category: Category }> {
     if (!this.ownsSpace(spaceId)) return { ok: false, error: 'That Space no longer exists.' };
+    if (!this.canEdit(spaceId)) return { ok: false, error: VIEW_ONLY };
     const error = this.categoryError(spaceId, draft);
     if (error) return { ok: false, error };
     const category: Category = {
@@ -763,6 +798,7 @@ export class AppStore {
   updateCategory(id: ID, draft: CategoryDraft): Result {
     const current = this.state.categories.find((c) => c.id === id);
     if (!current || !this.ownsSpace(current.spaceId)) return { ok: false, error: 'That category no longer exists.' };
+    if (!this.canEdit(current.spaceId)) return { ok: false, error: VIEW_ONLY };
     const fixed = { ...draft, kind: current.kind };
     const error = this.categoryError(current.spaceId, fixed, id);
     if (error) return { ok: false, error };
@@ -789,6 +825,7 @@ export class AppStore {
   deleteCategory(id: ID): Result<{ uncategorised: number }> {
     const current = this.state.categories.find((c) => c.id === id);
     if (!current || !this.ownsSpace(current.spaceId)) return { ok: false, error: 'That category no longer exists.' };
+    if (!this.canEdit(current.spaceId)) return { ok: false, error: VIEW_ONLY };
     const touched = this.state.transactions.filter((t) => t.categoryId === id).map((t) => ({ ...t, categoryId: undefined, subcategoryId: undefined }));
     this.replaceTransactions(touched);
     const recurring = this.state.recurring.filter((r) => r.categoryId === id).map((r) => ({ ...r, categoryId: undefined }));
@@ -825,6 +862,7 @@ export class AppStore {
 
   addPerson(spaceId: ID, input: PersonDraft): Result<{ person: Person }> {
     if (!this.ownsSpace(spaceId)) return { ok: false, error: 'That Space no longer exists.' };
+    if (!this.canEdit(spaceId)) return { ok: false, error: VIEW_ONLY };
     const name = input.name.trim();
     const error = this.personError(spaceId, name);
     if (error) return { ok: false, error };
@@ -846,6 +884,7 @@ export class AppStore {
   updatePerson(id: ID, input: PersonDraft): Result {
     const current = this.state.people.find((pp) => pp.id === id);
     if (!current || !this.ownsSpace(current.spaceId)) return { ok: false, error: 'That person no longer exists.' };
+    if (!this.canEdit(current.spaceId)) return { ok: false, error: VIEW_ONLY };
     const name = input.name.trim();
     const error = this.personError(current.spaceId, name, id);
     if (error) return { ok: false, error };
@@ -871,6 +910,7 @@ export class AppStore {
   deletePerson(id: ID): Result {
     const current = this.state.people.find((pp) => pp.id === id);
     if (!current || !this.ownsSpace(current.spaceId)) return { ok: false, error: 'That person no longer exists.' };
+    if (!this.canEdit(current.spaceId)) return { ok: false, error: VIEW_ONLY };
     if (this.personInUse(id)) return { ok: false, error: 'There are records with this person, so they cannot be removed.' };
     this.set({ people: this.state.people.filter((pp) => pp.id !== id) });
     this.persist(this.storage.remove('people', id));
@@ -886,6 +926,7 @@ export class AppStore {
     if (repeat) return { ok: true, obligation: repeat };
     const space = this.state.spaces.find((sp) => sp.id === draft.spaceId);
     if (!space) return { ok: false, error: 'That Space no longer exists.' };
+    if (!this.canEdit(draft.spaceId)) return { ok: false, error: VIEW_ONLY };
     if (!isMinorAmount(draft.amount) || draft.amount <= 0) return { ok: false, error: 'Enter an amount greater than zero.' };
     const person = this.state.people.find((pp) => pp.id === draft.personId && pp.spaceId === draft.spaceId);
     if (!person) return { ok: false, error: 'Choose a person from this Space.' };
@@ -984,6 +1025,7 @@ export class AppStore {
   updateObligation(id: ID, patch: ObligationPatch): Result {
     const current = this.state.obligations.find((o) => o.id === id);
     if (!current || !this.ownsSpace(current.spaceId)) return { ok: false, error: 'That record no longer exists.' };
+    if (!this.canEdit(current.spaceId)) return { ok: false, error: VIEW_ONLY };
     const title = patch.title.trim();
     if (!title) return { ok: false, error: 'Add a short description.' };
     if (!isMinorAmount(patch.amount) || patch.amount <= 0) return { ok: false, error: 'Enter an amount greater than zero.' };
@@ -1048,6 +1090,7 @@ export class AppStore {
   splitExpense(expenseId: ID, shares: { personId: ID; amount: number }[], dueDate?: ISODate): Result<{ count: number }> {
     const expense = this.state.transactions.find((t) => t.id === expenseId);
     if (expense?.type !== 'expense' || !this.ownsSpace(expense.spaceId)) return { ok: false, error: 'Only an expense can be shared.' };
+    if (!this.canEdit(expense.spaceId)) return { ok: false, error: VIEW_ONLY };
     const valid = shares.filter((share) => share.amount > 0);
     if (valid.length === 0) return { ok: false, error: 'Choose at least one person to share this with.' };
     if (new Set(valid.map((share) => share.personId)).size !== valid.length) return { ok: false, error: 'Each person can only be added once.' };
@@ -1087,6 +1130,7 @@ export class AppStore {
   setObligationCancelled(id: ID, cancelled: boolean): Result {
     const current = this.state.obligations.find((o) => o.id === id);
     if (!current || !this.ownsSpace(current.spaceId)) return { ok: false, error: 'That record no longer exists.' };
+    if (!this.canEdit(current.spaceId)) return { ok: false, error: VIEW_ONLY };
     const obligation: Obligation = { ...current, status: cancelled ? 'cancelled' : 'open', updatedAt: stamp() };
     this.set({ obligations: this.state.obligations.map((o) => (o.id === id ? obligation : o)) });
     this.save('obligations', obligation);
@@ -1097,6 +1141,7 @@ export class AppStore {
   deleteObligation(id: ID): Result {
     const current = this.state.obligations.find((o) => o.id === id);
     if (!current || !this.ownsSpace(current.spaceId)) return { ok: false, error: 'That record no longer exists.' };
+    if (!this.canEdit(current.spaceId)) return { ok: false, error: VIEW_ONLY };
     if (this.state.transactions.some((t) => t.obligationId === id)) {
       return { ok: false, error: 'Money has been recorded against this. Write it off instead of deleting it.' };
     }
@@ -1137,6 +1182,7 @@ export class AppStore {
 
   addBudget(spaceId: ID, draft: BudgetDraft): Result<{ budget: Budget }> {
     if (!this.ownsSpace(spaceId)) return { ok: false, error: 'That Space no longer exists.' };
+    if (!this.canEdit(spaceId)) return { ok: false, error: VIEW_ONLY };
     const error = this.budgetError(spaceId, draft);
     if (error) return { ok: false, error };
     const budget: Budget = { ...this.buildBudget(draft), id: newId(), spaceId, createdAt: stamp() };
@@ -1148,6 +1194,7 @@ export class AppStore {
   updateBudget(id: ID, draft: BudgetDraft): Result {
     const current = this.state.budgets.find((item) => item.id === id);
     if (!current || !this.ownsSpace(current.spaceId)) return { ok: false, error: 'That budget no longer exists.' };
+    if (!this.canEdit(current.spaceId)) return { ok: false, error: VIEW_ONLY };
     const error = this.budgetError(current.spaceId, draft);
     if (error) return { ok: false, error };
     const budget: Budget = { ...this.buildBudget(draft), id, spaceId: current.spaceId, createdAt: current.createdAt };
@@ -1160,6 +1207,7 @@ export class AppStore {
   deleteBudget(id: ID): Result {
     const current = this.state.budgets.find((item) => item.id === id);
     if (!current || !this.ownsSpace(current.spaceId)) return { ok: false, error: 'That budget no longer exists.' };
+    if (!this.canEdit(current.spaceId)) return { ok: false, error: VIEW_ONLY };
     this.set({ budgets: this.state.budgets.filter((item) => item.id !== id) });
     this.persist(this.storage.remove('budgets', id));
     return { ok: true };
@@ -1176,6 +1224,7 @@ export class AppStore {
   /** Creates a goal. `alreadySaved` records what was set aside before Finken, as its first entry. */
   addGoal(spaceId: ID, draft: GoalDraft, alreadySaved = 0): Result<{ goal: Goal }> {
     if (!this.ownsSpace(spaceId)) return { ok: false, error: 'That Space no longer exists.' };
+    if (!this.canEdit(spaceId)) return { ok: false, error: VIEW_ONLY };
     const error = this.goalError(draft);
     if (error) return { ok: false, error };
     if (!isMinorAmount(alreadySaved) || alreadySaved < 0) return { ok: false, error: 'The amount already saved cannot be negative.' };
@@ -1198,6 +1247,7 @@ export class AppStore {
   updateGoal(id: ID, draft: GoalDraft): Result {
     const current = this.state.goals.find((item) => item.id === id);
     if (!current || !this.ownsSpace(current.spaceId)) return { ok: false, error: 'That goal no longer exists.' };
+    if (!this.canEdit(current.spaceId)) return { ok: false, error: VIEW_ONLY };
     const error = this.goalError(draft);
     if (error) return { ok: false, error };
     const goal: Goal = {
@@ -1217,6 +1267,7 @@ export class AppStore {
   deleteGoal(id: ID): Result {
     const current = this.state.goals.find((item) => item.id === id);
     if (!current || !this.ownsSpace(current.spaceId)) return { ok: false, error: 'That goal no longer exists.' };
+    if (!this.canEdit(current.spaceId)) return { ok: false, error: VIEW_ONLY };
     const entries = this.state.goalEntries.filter((e) => e.goalId === id).map((e) => e.id);
     this.set({ goals: this.state.goals.filter((item) => item.id !== id), goalEntries: this.state.goalEntries.filter((e) => e.goalId !== id) });
     this.persist(this.storage.remove('goals', id));
@@ -1233,6 +1284,7 @@ export class AppStore {
     if (repeat) return { ok: true, entry: repeat };
     const goal = this.state.goals.find((item) => item.id === goalId);
     if (!goal || !this.ownsSpace(goal.spaceId)) return { ok: false, error: 'That goal no longer exists.' };
+    if (!this.canEdit(goal.spaceId)) return { ok: false, error: VIEW_ONLY };
     if (!isMinorAmount(input.amount) || input.amount === 0) return { ok: false, error: 'Enter an amount greater than zero.' };
     if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) return { ok: false, error: 'Choose a date.' };
     const saved = goalSaved(goalId, this.state.goalEntries);
@@ -1255,6 +1307,7 @@ export class AppStore {
   deleteGoalEntry(id: ID): Result {
     const entry = this.state.goalEntries.find((e) => e.id === id);
     if (!entry || !this.ownsSpace(entry.spaceId)) return { ok: false, error: 'That entry no longer exists.' };
+    if (!this.canEdit(entry.spaceId)) return { ok: false, error: VIEW_ONLY };
     if (goalSaved(entry.goalId, this.state.goalEntries) - entry.amount < 0) {
       return { ok: false, error: 'Removing this would leave less than zero saved. Remove a withdrawal first.' };
     }
@@ -1308,6 +1361,7 @@ export class AppStore {
 
   addRecurring(spaceId: ID, draft: RecurringDraft): Result<{ recurring: Recurring }> {
     if (!this.ownsSpace(spaceId)) return { ok: false, error: 'That Space no longer exists.' };
+    if (!this.canEdit(spaceId)) return { ok: false, error: VIEW_ONLY };
     const error = this.recurringError(spaceId, draft);
     if (error) return { ok: false, error };
     const recurring: Recurring = { ...this.buildRecurring(draft), id: newId(), spaceId, nextDueDate: draft.startDate, status: 'active' };
@@ -1320,6 +1374,7 @@ export class AppStore {
   updateRecurring(id: ID, draft: RecurringDraft, nextDueDate?: ISODate): Result {
     const current = this.state.recurring.find((r) => r.id === id);
     if (!current || !this.ownsSpace(current.spaceId)) return { ok: false, error: 'That item no longer exists.' };
+    if (!this.canEdit(current.spaceId)) return { ok: false, error: VIEW_ONLY };
     const error = this.recurringError(current.spaceId, draft);
     if (error) return { ok: false, error };
     const next = nextDueDate ?? current.nextDueDate;
@@ -1335,6 +1390,7 @@ export class AppStore {
   setRecurringStatus(id: ID, status: 'active' | 'paused' | 'cancelled'): Result {
     const current = this.state.recurring.find((r) => r.id === id);
     if (!current || !this.ownsSpace(current.spaceId)) return { ok: false, error: 'That item no longer exists.' };
+    if (!this.canEdit(current.spaceId)) return { ok: false, error: VIEW_ONLY };
     let nextDueDate = current.nextDueDate;
     if (status === 'active' && current.status !== 'active' && nextDueDate < today()) {
       nextDueDate = nextRecurringDate(current, addDaysISO(today(), -1));
@@ -1350,6 +1406,7 @@ export class AppStore {
   deleteRecurring(id: ID): Result {
     const current = this.state.recurring.find((r) => r.id === id);
     if (!current || !this.ownsSpace(current.spaceId)) return { ok: false, error: 'That item no longer exists.' };
+    if (!this.canEdit(current.spaceId)) return { ok: false, error: VIEW_ONLY };
     this.set({ recurring: this.state.recurring.filter((r) => r.id !== id) });
     this.persist(this.storage.remove('recurring', id));
     return { ok: true };
@@ -1368,6 +1425,7 @@ export class AppStore {
     if (source === 'recurring') {
       const current = this.state.recurring.find((r) => r.id === id);
       if (!current || !this.ownsSpace(current.spaceId)) return { ok: false, error: 'That item no longer exists.' };
+      if (!this.canEdit(current.spaceId)) return { ok: false, error: VIEW_ONLY };
       const next: Recurring = { ...current, snoozedUntil: until ?? undefined };
       this.set({ recurring: this.state.recurring.map((r) => (r.id === id ? next : r)) });
       this.save('recurring', next);
@@ -1375,6 +1433,7 @@ export class AppStore {
     }
     const current = this.state.obligations.find((o) => o.id === id);
     if (!current || !this.ownsSpace(current.spaceId)) return { ok: false, error: 'That record no longer exists.' };
+    if (!this.canEdit(current.spaceId)) return { ok: false, error: VIEW_ONLY };
     const next: Obligation = { ...current, snoozedUntil: until ?? undefined };
     this.set({ obligations: this.state.obligations.map((o) => (o.id === id ? next : o)) });
     this.save('obligations', next);
@@ -1385,6 +1444,7 @@ export class AppStore {
   skipRecurring(id: ID): Result {
     const item = this.state.recurring.find((r) => r.id === id);
     if (!item || !this.ownsSpace(item.spaceId)) return { ok: false, error: 'That item no longer exists.' };
+    if (!this.canEdit(item.spaceId)) return { ok: false, error: VIEW_ONLY };
     this.advanceRecurring(item);
     return { ok: true };
   }
@@ -1398,6 +1458,7 @@ export class AppStore {
     if (repeat) return { ok: true, transaction: repeat };
     const item = this.state.recurring.find((r) => r.id === id);
     if (!item || !this.ownsSpace(item.spaceId)) return { ok: false, error: 'That item no longer exists.' };
+    if (!this.canEdit(item.spaceId)) return { ok: false, error: VIEW_ONLY };
     if (item.status !== 'active') return { ok: false, error: 'Resume this item before marking it paid.' };
     const value = amount ?? item.amount;
     const linked = item.obligationId ? this.state.obligations.find((o) => o.id === item.obligationId) : undefined;

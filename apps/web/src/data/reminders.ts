@@ -17,6 +17,7 @@ import { dailyReminder } from '@finken/domain/reminders';
 import { useSyncExternalStore } from 'react';
 import { account } from './account';
 import type { AppState } from './store';
+import { track } from './usage';
 
 const PREF = 'finken:reminders';
 const SHOWN = 'finken:reminded';
@@ -136,6 +137,7 @@ export async function turnOnReminders(app: AppState): Promise<ReminderPermission
   write(`${PREF}:push`, pushed ? 'on' : null);
   set({ pushed });
   write(SHOWN, null);
+  track('reminders:on');
   await checkReminders(app);
   return 'granted';
 }

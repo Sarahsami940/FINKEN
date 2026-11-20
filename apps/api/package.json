@@ -12,7 +12,8 @@
     "test": "vitest run",
     "dev:memory": "node --import tsx scripts/dev-memory.ts",
     "db:reconcile": "node --env-file-if-exists=.env --import tsx src/reconcile.ts",
-    "db:restore-check": "node --env-file-if-exists=.env --import tsx src/restore.ts"
+    "db:restore-check": "node --env-file-if-exists=.env --import tsx src/restore.ts",
+    "beta": "node --env-file-if-exists=.env --import tsx src/beta.ts"
   },
   "dependencies": {
     "@finken/domain": "*",

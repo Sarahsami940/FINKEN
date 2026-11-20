@@ -3,9 +3,9 @@
  * and downloaded as CSV. Amounts stay as numbers; the screen formats them.
  */
 import { AGE_BUCKETS, ageing, byContact, cashFlow, incomeByCategory, monthlyCashFlow, profitAndLoss } from './business';
-import { formatMonthYear } from './dates';
+import { formatMonthYear, inRange } from './dates';
 import { toMajor } from './format';
-import { inPeriod, spendingByCategory } from './money';
+import { accountDelta, inPeriod, spendingByCategory } from './money';
 import type { Account, Category, DateRange, ISODate, Obligation, Person, Transaction } from './types';
 
 export type Cell = string | number;
@@ -15,6 +15,8 @@ export interface ReportSection {
   columns: string[];
   /** Columns holding amounts, for formatting and right alignment. */
   money: number[];
+  /** Text columns after the first that read better left-aligned (descriptions). */
+  left?: number[];
   rows: Cell[][];
   /** Optional total row. */
   total?: Cell[];
@@ -27,7 +29,7 @@ export interface Report {
   sections: ReportSection[];
 }
 
-export type ReportKey = 'revenue' | 'expenses' | 'categories' | 'receivables' | 'payables' | 'pnl' | 'cashflow';
+export type ReportKey = 'revenue' | 'expenses' | 'categories' | 'receivables' | 'payables' | 'pnl' | 'cashflow' | 'statement';
 
 export const REPORTS: { key: ReportKey; label: string }[] = [
   { key: 'revenue', label: 'Revenue' },
@@ -37,7 +39,17 @@ export const REPORTS: { key: ReportKey; label: string }[] = [
   { key: 'payables', label: 'Payables' },
   { key: 'pnl', label: 'Profit and loss' },
   { key: 'cashflow', label: 'Cash flow' },
+  { key: 'statement', label: 'Monthly statement' },
 ];
+
+const TYPE_LABEL: Record<Transaction['type'], string> = {
+  expense: 'Expense',
+  income: 'Income',
+  transfer: 'Transfer',
+  refund: 'Refund',
+  principal_in: 'Loan or repayment in',
+  principal_out: 'Loan or repayment out',
+};
 
 export interface ReportInput {
   accounts: Account[];
@@ -202,6 +214,8 @@ export function buildReport(key: ReportKey, input: ReportInput, range: DateRange
         sections: [{ title: 'Profit and loss', columns: ['Line', 'Category', 'Amount'], money: [2], rows }],
       };
     }
+    case 'statement':
+      return statement(input, range);
     case 'cashflow': {
       const active = accounts.filter((acc) => !acc.archived);
       const c = cashFlow(active, transactions, obligations, range);
@@ -233,6 +247,88 @@ export function buildReport(key: ReportKey, input: ReportInput, range: DateRange
       };
     }
   }
+}
+
+/**
+ * A statement for the period (usually one month): what the business earned
+ * and spent, how cash moved in each account, what was owed at the end, and
+ * every transaction. The parts agree with each other: each account's
+ * opening + in − out = closing, the accounts add up to the summary, and the
+ * transactions add up to the accounts.
+ */
+function statement(input: ReportInput, range: DateRange): Report {
+  const { accounts, categories, transactions, obligations, people } = input;
+  const active = accounts.filter((a) => !a.archived || transactions.some((t) => inRange(t.date, range) && (t.accountId === a.id || t.toAccountId === a.id)));
+  const pnl = profitAndLoss(transactions, categories, range);
+  const cash = cashFlow(active, transactions, obligations, range);
+  const perAccount = active.map((a) => ({ account: a, flow: cashFlow([a], transactions, obligations, range) }));
+  // What was owed at the end of the period, from what had happened by then.
+  const byEnd = transactions.filter((t) => t.date <= range.to);
+  const openAt = obligations.filter((o) => o.date <= range.to);
+  const owedToYou = ageing(openAt, byEnd, people, 'receivable', range.to);
+  const youOwe = ageing(openAt, byEnd, people, 'payable', range.to);
+  const names = new Map(active.map((a) => [a.id, a.name]));
+  const cats = new Map(categories.map((c) => [c.id, c.name]));
+  const lines = inPeriod(transactions, range)
+    .slice()
+    .sort((a, b) => a.date.localeCompare(b.date) || (a.createdAt ?? '').localeCompare(b.createdAt ?? ''));
+  const rows: Cell[][] = [];
+  let moneyIn = 0;
+  let moneyOut = 0;
+  for (const t of lines) {
+    const delta = active.reduce((s, a) => s + accountDelta(t, a.id), 0);
+    const account =
+      t.type === 'transfer' ? `${names.get(t.accountId) ?? 'Another account'} → ${names.get(t.toAccountId ?? '') ?? 'another account'}` : (names.get(t.accountId) ?? '');
+    const inn = delta > 0 ? delta : 0;
+    const out = delta < 0 ? -delta : 0;
+    moneyIn += inn;
+    moneyOut += out;
+    rows.push([t.date, t.description || TYPE_LABEL[t.type], TYPE_LABEL[t.type], (t.categoryId && cats.get(t.categoryId)) || '', account, inn || '', out || '']);
+  }
+  return {
+    key: 'statement',
+    title: 'Monthly statement',
+    description: 'Everything in the period on one page: profit, cash in each account, money owed at the end, and every transaction.',
+    sections: [
+      {
+        title: 'Summary',
+        columns: ['Line', 'Amount'],
+        money: [1],
+        rows: [
+          ['Revenue', pnl.revenue],
+          ['Expenses', -(pnl.costOfSales + pnl.operating)],
+          ['Net profit', pnl.netProfit],
+          ['Cash at the start', cash.opening],
+          ['Money received', cash.received],
+          ['Money paid', -cash.paid],
+          ['Cash at the end', cash.closing],
+          ['Customers owed you at the end', owedToYou.total],
+          ['You owed suppliers and others at the end', youOwe.total],
+        ],
+      },
+      {
+        title: 'Each account',
+        columns: ['Account', 'At the start', 'In', 'Out', 'At the end'],
+        money: [1, 2, 3, 4],
+        rows: perAccount.map(({ account, flow }) => [account.name, flow.opening, flow.received, flow.paid, flow.closing]),
+        total: [
+          'All accounts',
+          perAccount.reduce((s, p) => s + p.flow.opening, 0),
+          perAccount.reduce((s, p) => s + p.flow.received, 0),
+          perAccount.reduce((s, p) => s + p.flow.paid, 0),
+          perAccount.reduce((s, p) => s + p.flow.closing, 0),
+        ],
+      },
+      {
+        title: 'Transactions',
+        columns: ['Date', 'Description', 'Type', 'Category', 'Account', 'Money in', 'Money out'],
+        money: [5, 6],
+        left: [1, 2, 3, 4],
+        rows,
+        total: ['Total', '', '', '', '', moneyIn, moneyOut],
+      },
+    ],
+  };
 }
 
 // ── CSV ────────────────────────────────────────────────────────────────────

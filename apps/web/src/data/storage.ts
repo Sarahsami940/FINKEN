@@ -36,9 +36,18 @@ export type StorageEvent =
   /** The server refused a change made earlier on this device; it has been undone here. */
   | { type: 'rejected'; message: string };
 
+/** What the signed-in person may do in a shared Space. */
+export type SpaceRole = 'owner' | 'editor' | 'viewer';
+
 export interface StorageAdapter {
   /** True when the adapter keeps change history and soft deletes itself, as the API does. */
   readonly audited?: boolean;
+  /**
+   * With an account: the person's role in each Space they belong to, as the
+   * server last said (null before the first sync). Every Space this storage
+   * holds is then one they belong to, whoever owns it.
+   */
+  memberships?(): Promise<Record<string, SpaceRole> | null>;
   /** Storages that sync with a server report changes the store did not make. */
   subscribe?(listener: (event: StorageEvent) => void): () => void;
   getAll<T extends Entity>(collection: CollectionName): Promise<T[]>;

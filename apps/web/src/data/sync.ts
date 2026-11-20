@@ -20,10 +20,13 @@
  * A failed connection is never a refusal: the outbox simply waits.
  */
 import { type ApiClient, ApiError } from './api';
-import type { CollectionName, Entity, StorageAdapter, StorageEvent } from './storage';
+import type { CollectionName, Entity, SpaceRole, StorageAdapter, StorageEvent } from './storage';
 
 const LOCAL: ReadonlySet<CollectionName> = new Set(['users', 'credentials', 'meta', 'outbox']);
 const CURSOR_KEY = 'sync:cursor';
+const MEMBERS_KEY = 'sync:memberships';
+/** Every collection whose records belong to one Space. */
+const IN_SPACE: CollectionName[] = ['accounts', 'categories', 'people', 'obligations', 'recurring', 'transactions', 'budgets', 'goals', 'goalEntries'];
 
 interface OutboxEntry extends Entity {
   /** When the change was made on this device. */
@@ -293,7 +296,10 @@ export class SyncedStorage implements StorageAdapter {
     let cursor = Number(meta[0]?.value ?? 0);
     let changed = false;
     for (;;) {
-      const page = await this.api.request<{ changes: Change[]; cursor: number; more: boolean }>('GET', `/v1/changes?since=${cursor}`);
+      const page = await this.api.request<{ changes: Change[]; cursor: number; more: boolean; memberships?: { spaceId: string; role: SpaceRole }[] }>(
+        'GET',
+        `/v1/changes?since=${cursor}`,
+      );
       const waiting = this.pendingIds();
       const byCollection = new Map<CollectionName, { put: Entity[]; remove: string[] }>();
       for (const { collection, record } of page.changes) {
@@ -311,9 +317,41 @@ export class SyncedStorage implements StorageAdapter {
       }
       cursor = page.cursor;
       await this.cache.put('meta', { id: CURSOR_KEY, value: String(cursor) });
+      if (page.memberships && (await this.updateMemberships(page.memberships))) changed = true;
       if (!page.more) break;
     }
     if (changed) this.emit({ type: 'changed' });
+  }
+
+  /** The person's role in each Space, as the server last said. */
+  async memberships(): Promise<Record<string, SpaceRole> | null> {
+    const [saved] = await this.cache.getMany<Entity & { value: string }>('meta', [MEMBERS_KEY]);
+    return saved ? (JSON.parse(saved.value) as Record<string, SpaceRole>) : null;
+  }
+
+  /**
+   * Keeps the roles, and removes from this device every Space the person no
+   * longer belongs to (they left, or the owner removed them). Returns whether anything changed.
+   */
+  private async updateMemberships(list: { spaceId: string; role: SpaceRole }[]): Promise<boolean> {
+    const next = Object.fromEntries(list.map((m) => [m.spaceId, m.role]));
+    const before = await this.memberships();
+    if (before && JSON.stringify(before) === JSON.stringify(next)) return false;
+    await this.cache.put('meta', { id: MEMBERS_KEY, value: JSON.stringify(next) });
+    // Only Spaces the server listed before and has stopped listing: a Space made here and not sent yet is not listed either.
+    const gone = new Set(Object.keys(before ?? {}).filter((id) => !(id in next)));
+    if (gone.size) {
+      const waiting = this.pendingIds();
+      for (const collection of IN_SPACE) {
+        const records = await this.cache.getAll<Entity & { spaceId?: string }>(collection);
+        await this.cache.removeMany(
+          collection,
+          records.filter((r) => r.spaceId && gone.has(r.spaceId) && !waiting.has(r.id)).map((r) => r.id),
+        );
+      }
+      await this.cache.removeMany('spaces', [...gone]);
+    }
+    return true;
   }
 
   // ── Running in the browser ───────────────────────────────────────────────

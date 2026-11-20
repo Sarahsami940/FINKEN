@@ -4,6 +4,7 @@ import Fastify, { type FastifyReply, type FastifyRequest, type FastifyServerOpti
 import { z } from 'zod';
 import { deleteAccount, exportAccount } from './account';
 import { type AuthUser, devToken, makeVerifier, userFor, type Verifier } from './auth';
+import { type BetaAccess, betaAccess, countError, joinBeta, markSeen, recordUsage, saveFeedback, setUsageConsent } from './beta';
 import { isCollection } from './collections';
 import type { Config } from './config';
 import type { Db } from './db';
@@ -11,11 +12,14 @@ import { Metrics } from './metrics';
 import { allowedEndpoint, PUSH_HOSTS, removeSubscription, Subscription, saveSubscription } from './push';
 import { applyBatch, BatchError, changesSince, constraintMessage, getRecords, listRecords } from './records';
 import { type Limit, overLimit, RateLimiter, replySerializer, requestSerializer, routeOf, securityHeaders } from './security';
+import { cancelInvite, changeRole, createInvite, joinSpace, listInvites, listMembers, membershipList, removeMember, SharingError } from './sharing';
 
 export interface AppDeps {
   db: Db;
   config: Pick<Config, 'NODE_ENV' | 'LOG_LEVEL' | 'AUTH_MODE'> &
-    Partial<Pick<Config, 'AUTH_ISSUER' | 'AUTH_AUDIENCE' | 'AUTH_JWKS_URL' | 'AUTH_DEV_SECRET' | 'RATE_LIMIT_PER_MINUTE' | 'METRICS_TOKEN' | 'VAPID_PUBLIC_KEY'>>;
+    Partial<Pick<Config, 'AUTH_ISSUER' | 'AUTH_AUDIENCE' | 'AUTH_JWKS_URL' | 'AUTH_DEV_SECRET' | 'RATE_LIMIT_PER_MINUTE' | 'METRICS_TOKEN' | 'VAPID_PUBLIC_KEY'>> & {
+      BETA_ACCESS?: BetaAccess;
+    };
   /** Push services devices may register (tests add a local one). */
   pushHosts?: RegExp[];
   /** Replaces the token check built from config (tests). */
@@ -35,7 +39,7 @@ declare module 'fastify' {
   }
 }
 
-type LimitName = 'address' | 'signInFailures' | 'devToken' | 'person' | 'batch' | 'export' | 'clientErrors';
+type LimitName = 'address' | 'signInFailures' | 'devToken' | 'person' | 'batch' | 'export' | 'clientErrors' | 'invite' | 'feedback' | 'usage' | 'spaceJoin';
 
 const MINUTE = 60_000;
 const ClientError = z.object({ message: z.string().trim().min(1).max(500), where: z.string().max(200).optional(), release: z.string().max(40).optional() });
@@ -43,7 +47,34 @@ const DeleteConfirm = z.object({ confirm: z.literal('DELETE', 'Type DELETE to co
 const sameSecret = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 
 const Ids = z.object({ ids: z.array(z.string().min(1).max(100)).max(5000) });
-const MePatch = z.object({ name: z.string().trim().max(80).optional(), timeZone: z.string().refine(isValidTimeZone, 'Unknown time zone.').optional() });
+const MePatch = z.object({
+  name: z.string().trim().max(80).optional(),
+  timeZone: z.string().refine(isValidTimeZone, 'Unknown time zone.').optional(),
+  /** Whether usage may be counted (see beta.ts). */
+  usage: z.boolean().optional(),
+});
+const Join = z.object({ code: z.string().trim().min(1, 'Enter your invite code.').max(40) });
+const Feedback = z.object({
+  kind: z.enum(['problem', 'idea', 'praise'], 'Choose what kind of feedback this is.'),
+  message: z.string().trim().min(1, 'Write a few words first.').max(2000, 'Keep it under 2,000 characters.'),
+  screen: z.string().max(60).optional(),
+  release: z.string().max(40).optional(),
+});
+const InviteRole = z.object({ role: z.enum(['editor', 'viewer'], 'Choose whether they can edit or only view.') });
+const SpaceCode = z.object({ code: z.string().trim().min(1, 'Enter the invite code.').max(40) });
+const Usage = z.object({ events: z.array(z.object({ name: z.string().max(40), n: z.number().int().min(1).max(1000) })).max(100) });
+
+/** While the beta is invite-only, what someone without an invite may still do: see and leave their account, and talk to us. */
+const WITHOUT_INVITE = new Set([
+  'GET /v1/me',
+  'PATCH /v1/me',
+  'DELETE /v1/me',
+  'GET /v1/export',
+  'POST /v1/beta/join',
+  'POST /v1/feedback',
+  'POST /v1/client-errors',
+  'DELETE /v1/push/subscriptions',
+]);
 const DevIdentity = z.object({ subject: z.string().min(1).max(200), email: z.email().optional(), name: z.string().max(80).optional() });
 
 export function buildApp({ db, config, verify, limits = {}, logStream, pushHosts = PUSH_HOSTS }: AppDeps) {
@@ -69,6 +100,16 @@ export function buildApp({ db, config, verify, limits = {}, logStream, pushHosts
     logController: new LogController({ disableRequestLogging: true }),
   });
   const check = verify ?? makeVerifier(config as Config);
+  const access = betaAccess(config);
+  /** The signed-in person as the app sees them. */
+  const meOf = (u: AuthUser) => ({
+    id: u.id,
+    email: u.email,
+    name: u.name,
+    timeZone: u.timeZone,
+    access: access === 'open' || u.joinedBeta ? 'member' : 'invite-needed',
+    usage: u.usage,
+  });
   const metrics = new Metrics();
   app.decorate('metrics', metrics);
 
@@ -83,6 +124,12 @@ export function buildApp({ db, config, verify, limits = {}, logStream, pushHosts
     batch: budget('batch', { max: 120, windowMs: MINUTE }),
     export: budget('export', { max: 10, windowMs: 60 * MINUTE }),
     clientErrors: budget('clientErrors', { max: 20, windowMs: MINUTE }),
+    // Wrong invite codes: a handful an hour is plenty for typos, far too few to guess.
+    invite: budget('invite', { max: 10, windowMs: 60 * MINUTE }),
+    feedback: budget('feedback', { max: 10, windowMs: 60 * MINUTE }),
+    usage: budget('usage', { max: 30, windowMs: MINUTE }),
+    // Wrong Space invite codes, like beta codes: plenty for typos, far too few to guess.
+    spaceJoin: budget('spaceJoin', { max: 10, windowMs: 60 * MINUTE }),
   };
   const limited = (name: LimitName, key: string, reply: FastifyReply) => {
     const stopped = overLimit(limiters[name], key, reply);
@@ -129,6 +176,7 @@ export function buildApp({ db, config, verify, limits = {}, logStream, pushHosts
 
   const REASONS: Record<number, string> = { 400: 'shape', 403: 'permission', 409: 'conflict', 422: 'money_rules' };
   app.setErrorHandler((err: Error, req, reply) => {
+    if (err instanceof SharingError) return reply.code(err.status).send({ error: err.message });
     const known = err instanceof BatchError ? err : constraintMessage(err);
     if (known) {
       if (routeOf(req) === '/v1/batch') metrics.refused.inc({ reason: REASONS[known.status] ?? 'other' });
@@ -140,6 +188,7 @@ export function buildApp({ db, config, verify, limits = {}, logStream, pushHosts
     if (status && status < 500) return reply.code(status).send({ error: status === 413 ? 'That is too much to send at once.' : err.message });
     // The details go to the log, never to the client: the request id links the two.
     req.log.error({ err: { type: err.name, message: err.message, stack: err.stack } }, 'request failed');
+    void countError(db, 'server').catch(() => {});
     return reply.code(500).send({ error: 'Something went wrong. Try again.', requestId: req.id });
   });
 
@@ -168,17 +217,49 @@ export function buildApp({ db, config, verify, limits = {}, logStream, pushHosts
         return reply.code(401).send({ error: 'Sign in again.' });
       }
       if (limited('person', req.user.id, reply)) return reply;
+      // Counted once a day among the people using Finken; never in the way of the request itself.
+      if (!req.user.seenToday) await markSeen(db, req.user.id).catch((err) => req.log.warn({ err: { message: (err as Error).message } }, 'could not count today'));
+      if (access === 'invite' && !req.user.joinedBeta && !WITHOUT_INVITE.has(`${req.method} ${routeOf(req)}`)) {
+        return reply.code(403).send({ error: 'Finken is in a closed beta. Enter your invite code to start.', code: 'invite_needed' });
+      }
     });
 
-    api.get('/v1/me', async (req) => req.user);
+    api.get('/v1/me', async (req) => meOf(req.user));
 
     api.patch('/v1/me', async (req) => {
       const patch = MePatch.parse(req.body ?? {});
-      const [row] = await db.query<{ id: string; email: string | null; name: string; time_zone: string }>(
-        'update users set name = coalesce($2, name), time_zone = coalesce($3, time_zone) where id = $1 returning id, email, name, time_zone',
+      const [row] = await db.query<{ name: string; time_zone: string }>(
+        'update users set name = coalesce($2, name), time_zone = coalesce($3, time_zone) where id = $1 returning name, time_zone',
         [req.user.id, patch.name ?? null, patch.timeZone ?? null],
       );
-      return { id: row.id, email: row.email, name: row.name, timeZone: row.time_zone };
+      if (patch.usage !== undefined) await setUsageConsent(db, req.user.id, patch.usage);
+      const usage = patch.usage === undefined ? req.user.usage : patch.usage ? 'yes' : 'no';
+      return meOf({ ...req.user, name: row.name, timeZone: row.time_zone, usage });
+    });
+
+    /** Joins the closed beta with an invite code. */
+    api.post('/v1/beta/join', async (req, reply) => {
+      const { code } = Join.parse(req.body ?? {});
+      if (limited('invite', req.user.id, reply)) return reply;
+      const result = await joinBeta(db, req.user.id, code);
+      if (result === 'invalid') return reply.code(400).send({ error: 'That invite code is not right, or it has been used up. Check it and try again.' });
+      if (result === 'joined') req.log.info({ user: req.user.id }, 'joined the beta');
+      return meOf({ ...req.user, joinedBeta: true });
+    });
+
+    /** Feedback from inside the app, in the person's own words. */
+    api.post('/v1/feedback', async (req, reply) => {
+      const feedback = Feedback.parse(req.body ?? {});
+      if (limited('feedback', req.user.id, reply)) return reply;
+      return reply.code(201).send({ id: await saveFeedback(db, req.user.id, feedback) });
+    });
+
+    /** Usage counts, kept only for people who said yes; for everyone else they are dropped. */
+    api.post('/v1/usage', async (req, reply) => {
+      if (limited('usage', req.user.id, reply)) return reply;
+      const { events } = Usage.parse(req.body ?? {});
+      if (req.user.usage === 'yes') await recordUsage(db, req.user.id, events);
+      return reply.code(204).send();
     });
 
     api.get<{ Params: { collection: string } }>('/v1/records/:collection', async (req, reply) => {
@@ -241,13 +322,58 @@ export function buildApp({ db, config, verify, limits = {}, logStream, pushHosts
       if (limited('clientErrors', req.user.id, reply)) return reply;
       const report = ClientError.parse(req.body ?? {});
       metrics.clientErrors.inc();
+      await countError(db, 'client');
       req.log.warn({ user: req.user.id, client: report }, 'client error');
       return reply.code(204).send();
     });
 
     api.get<{ Querystring: { since?: string } }>('/v1/changes', async (req) => {
       const since = Number(req.query.since ?? 0);
-      return changesSince(db, req.user, Number.isSafeInteger(since) && since >= 0 ? since : 0);
+      const page = await changesSince(db, req.user, Number.isSafeInteger(since) && since >= 0 ? since : 0);
+      // Which Spaces this person is in, and as what: devices remove Spaces they have left.
+      return { ...page, memberships: await membershipList(db, req.user.id) };
+    });
+
+    // ── Sharing a Space ──────────────────────────────────────────────────────
+    type SpaceParams = { Params: { spaceId: string } };
+
+    /** Who is in the Space, and what each person may do. */
+    api.get<SpaceParams>('/v1/spaces/:spaceId/members', async (req) => ({ members: await listMembers(db, req.params.spaceId, req.user.id) }));
+
+    /** The owner changes a member's role. */
+    api.patch<{ Params: { spaceId: string; userId: string } }>('/v1/spaces/:spaceId/members/:userId', async (req) => {
+      const { role } = InviteRole.parse(req.body ?? {});
+      await changeRole(db, req.params.spaceId, req.user.id, req.params.userId, role);
+      return { members: await listMembers(db, req.params.spaceId, req.user.id) };
+    });
+
+    /** The owner removes a member, or a member leaves. */
+    api.delete<{ Params: { spaceId: string; userId: string } }>('/v1/spaces/:spaceId/members/:userId', async (req, reply) => {
+      await removeMember(db, req.params.spaceId, req.user.id, req.params.userId);
+      req.log.info({ user: req.user.id, space: req.params.spaceId, left: req.params.userId === req.user.id }, 'member removed');
+      return reply.code(204).send();
+    });
+
+    /** The owner invites one person, as an editor or a viewer. */
+    api.post<SpaceParams>('/v1/spaces/:spaceId/invites', async (req, reply) => {
+      const { role } = InviteRole.parse(req.body ?? {});
+      return reply.code(201).send(await createInvite(db, req.params.spaceId, req.user.id, role));
+    });
+
+    api.get<SpaceParams>('/v1/spaces/:spaceId/invites', async (req) => ({ invites: await listInvites(db, req.params.spaceId, req.user.id) }));
+
+    api.delete<{ Params: { spaceId: string; inviteId: string } }>('/v1/spaces/:spaceId/invites/:inviteId', async (req, reply) => {
+      await cancelInvite(db, req.params.spaceId, req.user.id, Number.parseInt(req.params.inviteId, 10) || -1);
+      return reply.code(204).send();
+    });
+
+    /** Joins a Space with an invite code. */
+    api.post('/v1/spaces/join', async (req, reply) => {
+      const { code } = SpaceCode.parse(req.body ?? {});
+      if (limited('spaceJoin', req.user.id, reply)) return reply;
+      const joined = await joinSpace(db, req.user.id, code);
+      if (!joined.already) req.log.info({ user: req.user.id, space: joined.spaceId, role: joined.role }, 'joined a space');
+      return joined;
     });
   });
 
