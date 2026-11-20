@@ -28,7 +28,8 @@ People can try everything as a **guest** with demo data, then create a (local, s
 - **Storage abstraction.** The store only talks to `StorageAdapter` (`apps/web/src/data/storage.ts`). `IndexedDbAdapter` is used in the browser; `MemoryAdapter` is used in tests and when IndexedDB is unavailable. An API-backed adapter will replace it in Phase 2 without touching logic or UI.
 - **Auth abstraction.** `AuthService` (`apps/web/src/data/auth.ts`) with a local, prototype-only implementation.
 - **Space isolation.** `useSpaceData()` returns only the active Space's records; `useSpaceRecords(id)` returns one named Space's. Cross-Space views (Transactions, Analytics, Search) filter explicitly.
-- **API (foundation only).** `apps/api` is a Fastify server on PostgreSQL. It has configuration checks, health and readiness endpoints, and plain-SQL migrations. It stores no money records yet; the web app does not call it yet.
+- **API.** `apps/api` is a Fastify server on PostgreSQL. It stores every record in typed tables whose constraints keep money whole and every link inside its Space. It checks sign-in tokens from any standard provider, limits every read and write to the Spaces the user belongs to, and runs the same money rules as the app before any save commits. See [docs/API.md](docs/API.md).
+- **Two kinds of storage, one interface.** `ApiStorage` and `ApiAuthService` (`apps/web/src/data/api.ts`) implement the same interfaces as browser storage and local sign-in, so the store, money rules and screens run unchanged on either. `SyncedStorage` (`apps/web/src/data/sync.ts`) adds an offline copy and an outbox: the app reads and writes on the device and syncs only changes, and the later edit wins when two devices change the same record. The web app still uses browser storage until a sign-in provider is chosen; `tests/e2e` runs the store against the real API, directly and through sync.
 - **Code splitting.** Home, Transactions, Money and More load with the app; the other screens load the first time they are opened (`apps/web/src/App.tsx`).
 
 ```
@@ -68,6 +69,9 @@ apps/
         storage.ts         StorageAdapter + IndexedDB and in-memory adapters
         auth.ts            AuthService + LocalAuthService (prototype sign-in)
         hooks.ts           useAppState, useSpaceData, useSpaceRecords
+        api.ts             ApiStorage and ApiAuthService: the same interfaces, backed by the API
+        sync.ts            SyncedStorage: offline copy, outbox, change feed, conflicts
+        scenarios.ts       The data-consistency scenarios, shared by browser and API runs
         integration.test.ts  The 12 data-consistency scenarios, run against the real store
       components/
         ui/                Design system: Button, Card, Field, Modal, Dropdown, Toast, Misc (Badge, Segmented, ProgressBar…)
@@ -81,11 +85,16 @@ apps/
       config.ts          Environment settings, checked at start-up
       db.ts              Database interface and the postgres.js connection
       migrate.ts         Migration runner (npm run db:migrate)
-      app.ts             Routes: /health and /ready
+      app.ts             Routes: health, sign-in check, /v1 records, batch and changes
+      auth.ts            Sign-in token checks (provider or development) and user records
+      collections.ts     How each kind of record maps onto its table
+      records.ts         Reads and all-or-nothing batches: permissions and money rules
       server.ts          Starts the server and shuts it down cleanly
       testing.ts         In-memory Postgres (PGlite) for tests
     migrations/        Numbered SQL files, applied in order and never edited once applied
     Dockerfile         Production image
+tests/e2e/            The web store against the real API and Postgres
+docs/API.md            Endpoints, sign-in, permissions and the server's checks
 docs/ENVIRONMENTS.md   Development, staging and production
 docker-compose.yml     Local Postgres for development
 .github/               Automatic checks (CI) and dependency updates
@@ -93,7 +102,7 @@ docker-compose.yml     Local Postgres for development
 
 ## 4. Data models
 
-All models are in `packages/domain/src/types.ts` with comments on every field. Amounts are always positive numbers; direction comes from the type. Dates are local `YYYY-MM-DD` strings.
+All models are in `packages/domain/src/types.ts` with comments on every field. Amounts are whole numbers of paisa (cents for USD): Rs. 1,250.50 is stored as `125050`. They are positive; direction comes from the type. Dates are `YYYY-MM-DD` calendar dates with no time zone. Every money record also carries change history (`createdAt`, `createdBy`, `updatedAt`, `updatedBy`, `version`, and `deletedAt`/`deletedBy` once deleted), written by the storage layer.
 
 | Model | What it is | Key fields |
 | --- | --- | --- |
@@ -120,6 +129,15 @@ Transaction types:
 | `principal_out` | Money lent, or a loan repaid | Neither |
 
 ## 5. Business rules
+
+**Exact money, time and history** (`packages/domain/src/format.ts`, `dates.ts`, `units.ts`; `apps/web/src/data/storage.ts`)
+- Money is stored and added up in whole paisa, so totals are exact. Typed amounts are read digit by digit (`parseMoney`), never through decimals, and accept at most two decimal places. A save with anything other than whole paisa is refused.
+- Recorded amounts show exactly: "Rs. 1,250" or "Rs. 1,250.50". A calculated estimate that is not whole paisa, such as an average or a projection, shows to the nearest rupee. "About X a day" figures round down to a whole rupee; a goal's monthly target rounds up to one. Equal shares of a whole-rupee expense stay in whole rupees and always add up to the total.
+- CSV exports give money columns in rupees with two decimals.
+- "Today", and so this week and this month, is the calendar date in the user's time zone (Settings → Time zone; new users and guests take the device's zone, then Asia/Karachi if it cannot be read). Records keep their calendar dates wherever they are viewed. Timestamps are UTC.
+- Every save to a money record stamps who and when, and the next version number; the original creation is kept and cannot be overwritten by the caller. Deleting marks a record deleted instead of erasing it: it disappears from every screen and figure, is kept for undo and sync, and comes back if saved again. Only resetting the demo erases records for good. Sign-in data is erased for real.
+- Saves are safe to retry. Each form picks the id of the record it will create when it opens, so pressing Save twice records the money once. Marking a recurring payment paid uses that occurrence as the id, so the same occurrence can never be paid twice.
+- Data saved by earlier versions is converted from rupees to paisa when the browser database upgrades to version 5, in one transaction.
 
 **Records and Spaces**
 - Every record belongs to exactly one Space, and every Space to one user. Screens read through `useSpaceData`; cross-Space views filter explicitly and hide totals when currencies differ.
@@ -197,28 +215,51 @@ npm run dev:api                          # http://127.0.0.1:4000/health and /rea
 
 In development the web app forwards `/api/*` to the API, so the browser never needs a cross-origin request.
 
+**Account mode** (records on the API, with an offline copy in the browser):
+
+```bash
+npm run dev:api          # or, without Docker: npm run dev:api:memory (an in-memory database, emptied when stopped)
+npm run dev:account      # the web app with VITE_API_URL=/api (apps/web/.env.account)
+```
+
+Sign in with any email: until the sign-in provider is chosen, a development API hands out sign-in tokens with no password. If this browser has data saved before accounts, Finken offers to move it into the account (see [docs/API.md](docs/API.md#moving-data-saved-in-a-browser-into-an-account)). Browser data is kept per address, so run both modes on the same port (5173) to see the browser-only data from account mode.
+
 **Checks**
 
 ```bash
 npm run lint       # Biome: lint and formatting (npm run format fixes what it can)
 npm run typecheck  # TypeScript, every package
-npm test           # 135 tests: money rules, the web store, and the API
+npm test           # 288 tests: money rules (with CSV import and reminders), the web store, the API (with security, reconciliation, restore and push), the store against the API and through sync, and moving browser data
 npm run build      # web app into apps/web/dist, API into apps/api/dist
 npm run check      # all of the above, as CI runs it
 ```
 
-Tests cover the Money Engine, planning, Coming up, dashboard, insights, analytics, Money Health, Safe to Spend, business calculations and reports, search, typed capture, and the 12 data-consistency scenarios (in `apps/web/src/data/integration.test.ts`): expense, income, transfer, budget use, part-settled receivable and payable, loan repayment, recurring in Coming up, goal contribution, Space isolation, edit and delete, and persistence after a refresh. API tests run migrations and the health checks against PGlite, an in-memory build of real Postgres, so no database is needed to run them.
+Tests cover the Money Engine, planning, Coming up, dashboard, insights, analytics, Money Health, Safe to Spend, business calculations and reports, search, typed capture, and the 12 data-consistency scenarios (in `apps/web/src/data/integration.test.ts`): expense, income, transfer, budget use, part-settled receivable and payable, loan repayment, recurring in Coming up, goal contribution, Space isolation, edit and delete, and persistence after a refresh. Six more cover the production rules: a repeated save, a recurring payment marked paid twice, whole paisa, soft delete after a refresh, change history, and time zones. Separate tests cover reading and showing paisa, time zones around midnight and daylight saving, and the change-history storage. API tests run migrations and the health checks against PGlite, an in-memory build of real Postgres, so no database is needed to run them.
 
 **Automatic checks.** On every push to `main` and every pull request, GitHub Actions (`.github/workflows/ci.yml`) runs lint, type-checks, tests and both builds; applies the migrations to a real Postgres 18 twice (the second run must change nothing) and checks the API reaches it; and builds the API container. Dependabot proposes dependency updates weekly.
 
 **Lint rules switched off, and why:** non-null assertions (used deliberately after checks); assignment inside a condition (the `if ((m = text.match(…)))` idiom in the parsers); "use Math.min/max" (its automatic fix breaks date comparisons, because dates are compared as text); semantic-element suggestions (the custom radio and group controls use correct ARIA roles). Single exceptions are marked in the code with `biome-ignore` and a reason.
 
-Settings and environments are described in [docs/ENVIRONMENTS.md](docs/ENVIRONMENTS.md).
+**Browser, accessibility and load tests**
+
+```bash
+npm run test:browser         # Playwright: the money and account flows, and axe scans of 27 screens (uses the installed Edge or Chrome)
+npm run load -w @finken/e2e  # 20 people at once; checks every expense arrives exactly once and every balance matches
+```
+
+**Documents:**
+- [docs/ENVIRONMENTS.md](docs/ENVIRONMENTS.md): settings and environments;
+- [docs/API.md](docs/API.md): the API, sync and moving browser data;
+- [docs/SECURITY.md](docs/SECURITY.md): threats, protections and tests;
+- [docs/PRIVACY.md](docs/PRIVACY.md): what is kept, for how long, export and deletion;
+- [docs/OPERATIONS.md](docs/OPERATIONS.md): monitoring, the nightly check, backups and restores, load testing;
+- [docs/LEGAL-PAKISTAN.md](docs/LEGAL-PAKISTAN.md): questions for a lawyer before launch.
 
 ## 8. Known limitations
 
 - **Storage and sign-in.** Data lives only in this browser (IndexedDB), with no server, sync or backup. Sign-in is simulated and **not production-secure**: accounts and salted password hashes sit in the same browser storage, with no email verification or password recovery.
-- **No notifications.** Reminders appear inside Finken only. Not installable or offline-capable (no service worker).
+- **Reminders** come once a day and never show amounts or names. In browser-only mode they arrive only while Finken is open. Pushed reminders (when Finken is closed) need an account and the server's VAPID keys. iPhones receive them only when Finken is installed to the home screen.
+- **Import** reads CSV only (not PDF or Excel files; save those as CSV first). Each line becomes money out or in: an ATM withdrawal or a transfer between your own accounts is imported as spending, to change by hand.
 - **Search** is English pattern matching, not a language model. It understands periods, categories and subcategories, people, accounts, amounts and Space names; other words become a text search. It does not answer "why" or advice questions.
 - **Typed capture** is English pattern matching for amounts, dates and everyday words.
 - **Money owed** is cash basis: nothing counts until money moves. Undated money owed is listed on Coming up but left out of totals and the calendar.
@@ -226,17 +267,17 @@ Settings and environments are described in [docs/ENVIRONMENTS.md](docs/ENVIRONME
 - **Spaces.** No transfers between Spaces. People belong to one Space. Splitting covers expenses you paid.
 - **Goals** are not tied to an account, so Finken cannot check the money is there.
 - **Business.** No inventory, payroll processing, tax, invoicing documents or double-entry accounting. Business Spaces created before Business Mode treat every category as operating until changed.
-- **Tests** cover logic, the store and the API foundation; there are no automated UI tests.
-- **API.** Foundation only: no money tables, endpoints or sign-in yet (Phase 2 of the production plan).
+- **Tests** cover logic, the store, the API, sync and moving data, with browser tests for the main money and account flows and accessibility scans. Many screens (budgets, goals, money owed, business) are checked for accessibility but not yet driven step by step in the browser.
+- **API.** No sign-in provider is chosen yet. The web app saves to the browser unless it is built for account mode (`VITE_API_URL`), which for now signs in with a development-only, password-free sign-in. Sharing a Space with other people has no screens or endpoint yet.
 
 ## 9. Suggested next steps for production development
 
 1. **Backend and real accounts.** Implement `StorageAdapter` and `AuthService` against the Postgres API in `apps/api`. Enforce per-user and per-Space access on the server, not only in the client.
 2. **Sync and conflicts.** Add server timestamps and a sync strategy for multiple devices; keep IndexedDB as an offline cache.
 3. **Server-side validation.** Run `checkTransaction` and the obligation rules on the server too; the domain modules are framework-free and can be shared.
-4. **Money precision.** Store amounts as integer minor units and add multi-currency support (exchange rates for All Spaces totals).
-5. **Notifications.** Push or email reminders driven by `needsReminder`, with snooze respected.
-6. **Imports.** Bank statement and CSV import with duplicate detection and category learning.
+4. **Multi-currency.** Amounts are already exact minor units; add exchange rates so All Spaces totals can mix currencies.
+5. **Notifications.** Email reminders as well as push, and reminders for budgets running out.
+6. **Imports.** PDF statements, recognising transfers between your own accounts, and remembering each bank's column layout.
 7. **Search.** Keep the current parser for transparency, optionally adding a language-model layer that maps questions onto the same structured query, so answers still come only from records.
 8. **Business.** Invoice documents, tax settings and accountant export formats.
 9. **Quality.** Component and end-to-end tests (for example Playwright) for the main flows; accessibility audit; performance budget per route.

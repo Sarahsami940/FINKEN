@@ -1,6 +1,6 @@
 import { transactionsLink } from '@finken/domain/dashboard';
 import { formatDay, formatRelativeDay, today } from '@finken/domain/dates';
-import { formatMoney } from '@finken/domain/format';
+import { formatMoney, formatNumber } from '@finken/domain/format';
 import { owedToYouKind } from '@finken/domain/money';
 import { parseSearch, runSearch, type SearchQuery, type SearchResult, suggestions } from '@finken/domain/search';
 import { ArrowRight, Search, SearchX, Sparkles } from 'lucide-react';
@@ -142,8 +142,8 @@ function Interpretation({ query }: { query: SearchQuery }) {
   if (query.range) chips.push({ label: 'Period', value: `${query.rangeLabel} (${formatDay(query.range.from)} – ${formatDay(query.range.to)})` });
   else if (query.intent === 'upcoming') chips.push({ label: 'Period', value: 'Next 30 days' });
   else chips.push({ label: 'Period', value: 'All time' });
-  if (query.min !== undefined) chips.push({ label: 'Amount', value: `Rs. ${query.min.toLocaleString('en-GB')} or more` });
-  if (query.max !== undefined) chips.push({ label: 'Amount', value: `Rs. ${query.max.toLocaleString('en-GB')} or less` });
+  if (query.min !== undefined) chips.push({ label: 'Amount', value: `${formatMoney(query.min)} or more` });
+  if (query.max !== undefined) chips.push({ label: 'Amount', value: `${formatMoney(query.max)} or less` });
   chips.push({
     label: 'Space',
     value: query.spaceScope === 'all' ? 'All Spaces' : query.spaceIds.map((id) => spaces.find((s) => s.id === id)?.name).join(', '),
@@ -168,7 +168,7 @@ function Interpretation({ query }: { query: SearchQuery }) {
 
 function Answer({ query, result, onOpen }: { query: SearchQuery; result: SearchResult; onOpen: (id: string) => void }) {
   const state = useAppState();
-  const money = (n: number, currency: string | null) => (currency ? formatMoney(n, currency) : `${n.toLocaleString('en-GB')}`);
+  const money = (n: number, currency: string | null) => (currency ? formatMoney(n, currency) : formatNumber(n));
   const when = periodPhrase(query.rangeLabel);
   const scopeNote = result.currency === null ? 'These Spaces use different currencies, so amounts are not added together.' : null;
 

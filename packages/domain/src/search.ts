@@ -7,6 +7,7 @@
  * so an unsupported question returns "nothing found", never a made-up figure.
  */
 import { addDays, addMonths, monthRange, parseISODate, today, weekRange } from './dates';
+import { toMinor } from './format';
 import { type ObligationPosition, obligationPosition, owedToYouKind } from './money';
 import type { Account, Category, DateRange, ID, ISODate, Obligation, Person, Recurring, Space, Transaction } from './types';
 import { type ExpectedEvent, expectedEvents } from './upcoming';
@@ -85,7 +86,7 @@ function take(state: { text: string }, phrases: string[]): boolean {
 
 function amountOf(digits: string, k?: string): number {
   const n = Number(digits.replace(/,/g, ''));
-  return k ? n * 1000 : n;
+  return toMinor(k ? n * 1000 : n);
 }
 
 function rangeFor(text: string, anchor: ISODate): { range: DateRange; label: string; match: string } | null {

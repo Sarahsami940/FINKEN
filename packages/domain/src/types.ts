@@ -12,7 +12,7 @@
  */
 
 export type ID = string;
-/** Calendar date in local time, formatted YYYY-MM-DD. */
+/** A calendar date, YYYY-MM-DD, with no time zone. "Today" is worked out in the user's time zone (see dates.ts). */
 export type ISODate = string;
 
 export interface User {
@@ -21,6 +21,8 @@ export interface User {
   email?: string;
   /** Guests have no account; their data exists only in this browser. */
   isGuest: boolean;
+  /** IANA time zone, such as Asia/Karachi. Decides what "today" is. Set from the device at sign-up. */
+  timeZone?: string;
 }
 
 export type SpaceType = 'personal' | 'business' | 'family' | 'other';

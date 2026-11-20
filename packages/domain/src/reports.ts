@@ -4,6 +4,7 @@
  */
 import { AGE_BUCKETS, ageing, byContact, cashFlow, incomeByCategory, monthlyCashFlow, profitAndLoss } from './business';
 import { formatMonthYear } from './dates';
+import { toMajor } from './format';
 import { inPeriod, spendingByCategory } from './money';
 import type { Account, Category, DateRange, ISODate, Obligation, Person, Transaction } from './types';
 
@@ -236,8 +237,8 @@ export function buildReport(key: ReportKey, input: ReportInput, range: DateRange
 
 // ── CSV ────────────────────────────────────────────────────────────────────
 
-function csvCell(value: Cell): string {
-  const text = typeof value === 'number' ? String(Math.round(value * 100) / 100) : value;
+function csvCell(value: Cell, money = false): string {
+  const text = typeof value === 'number' ? (money ? toMajor(Math.round(value)).toFixed(2) : String(Math.round(value * 100) / 100)) : value;
   // Quote anything with a comma, quote or line break; and stop spreadsheet formulas.
   const safe = /^[=+\-@]/.test(text) && typeof value === 'string' ? `'${text}` : text;
   return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
@@ -253,9 +254,10 @@ export function reportToCsv(report: Report, meta: { space: string; range: DateRa
     csvCell(report.description),
   ];
   for (const section of report.sections) {
-    lines.push('', csvCell(section.title), section.columns.map(csvCell).join(','));
-    for (const row of section.rows) lines.push(row.map(csvCell).join(','));
-    if (section.total) lines.push(section.total.map(csvCell).join(','));
+    lines.push('', csvCell(section.title), section.columns.map((c) => csvCell(c)).join(','));
+    const row = (cells: Cell[]) => cells.map((c, i) => csvCell(c, section.money.includes(i))).join(',');
+    for (const r of section.rows) lines.push(row(r));
+    if (section.total) lines.push(row(section.total));
   }
   return `${lines.join('\r\n')}\r\n`;
 }

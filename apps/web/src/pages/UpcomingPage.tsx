@@ -1,7 +1,7 @@
 import { addDays, diffDays, formatDay, formatDueLabel, formatFullDate, formatMonthYear, formatRelativeDay, monthRange, parseISODate, today } from '@finken/domain/dates';
-import { formatMoney } from '@finken/domain/format';
+import { formatMoney, moneyToInput, parseMoney } from '@finken/domain/format';
 import { accountBalances } from '@finken/domain/money';
-import { frequencyLabel } from '@finken/domain/planning';
+import { frequencyLabel, occurrenceId } from '@finken/domain/planning';
 import type { DateRange, ID, ISODate } from '@finken/domain/types';
 import {
   DUE_SOON_DAYS,
@@ -201,16 +201,16 @@ function SettledRow({ s, lookup, onOpen }: { s: SettledEvent; lookup: Lookup; on
 
 function ConfirmRecurring({ e, currency, onClose }: { e: ExpectedEvent; currency: string; onClose: () => void }) {
   const toast = useToast();
-  const [amount, setAmount] = useState(String(e.amount));
+  const [amount, setAmount] = useState(moneyToInput(e.amount));
   const [date, setDate] = useState(today());
   const [error, setError] = useState<string | null>(null);
   const received = e.direction === 'in';
 
   function submit(ev: FormEvent) {
     ev.preventDefault();
-    const value = Number(amount);
+    const value = parseMoney(amount);
     if (!Number.isFinite(value) || value <= 0) return setError('Enter an amount greater than zero.');
-    const result = store.confirmRecurring(e.sourceId, date, value);
+    const result = store.confirmRecurring(e.sourceId, date, value, occurrenceId(e.sourceId, e.date));
     if (!result.ok) return setError(result.error);
     toast(received ? `${e.title} marked as received` : `${e.title} marked as paid`);
     onClose();

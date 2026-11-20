@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="t">
+  <title id="t">Finken</title>
+  <rect width="512" height="512" rx="112" fill="#17191e"/>
+  <text x="226" y="372" text-anchor="middle" font-family="'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif" font-weight="800" font-size="320" fill="#ffffff">f</text>
+  <circle cx="338" cy="348" r="30" fill="#5b70f0"/>
+</svg>

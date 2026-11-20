@@ -1,11 +1,14 @@
-import { type ComponentType, lazy, useEffect } from 'react';
+import { type ComponentType, lazy, useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell } from './app/AppShell';
 import { AddFlowProvider } from './components/money/AddFlow';
 import { ToastProvider } from './components/ui/Toast';
+import { account } from './data/account';
 import { useAppState } from './data/hooks';
+import { startReminders } from './data/reminders';
 import { store } from './data/store';
-import { FirstSpaceStep, Onboarding } from './onboarding/Onboarding';
+import { useLocalSpaces } from './onboarding/MoveData';
+import { FirstSpaceStep, MoveDataStep, Onboarding } from './onboarding/Onboarding';
 import { HomePage } from './pages/HomePage';
 import { MoneyPage } from './pages/MoneyPages';
 import { MorePage, SpacesPage } from './pages/MorePages';
@@ -28,6 +31,7 @@ const ObligationsPage = lazy(async () => ({ default: (await import('./pages/Owed
 const BudgetsPage = page(() => import('./pages/PlanningPages'), 'BudgetsPage');
 const GoalsPage = page(() => import('./pages/PlanningPages'), 'GoalsPage');
 const RecurringPage = page(() => import('./pages/PlanningPages'), 'RecurringPage');
+const ImportPage = page(() => import('./pages/ImportPage'), 'ImportPage');
 
 function Loading() {
   return (
@@ -42,13 +46,31 @@ function Loading() {
 export function App() {
   const { ready, user, spaces } = useAppState();
 
+  const local = useLocalSpaces(account);
+  const [moveClosed, setMoveClosed] = useState(false);
+
   useEffect(() => {
-    void store.init();
+    void store.init().then(() => {
+      if (store.getState().user) account?.start();
+      startReminders(store.getState);
+    });
   }, []);
 
-  if (!ready) return <Loading />;
+  if (!ready || !local.spaces) return <Loading />;
   // Nobody has entered yet: welcome, sign-up, login or guest.
   if (!user) return <Onboarding />;
+  // Signed in to an account, with data saved in this browser from before: offer to bring it in.
+  if (account && !moveClosed && !account.moveDismissed(user.id) && local.spaces.some((s) => !s.moved)) {
+    return (
+      <MoveDataStep
+        account={account}
+        onDone={(choice) => {
+          if (choice === 'later') account?.dismissMove(user.id);
+          setMoveClosed(true);
+        }}
+      />
+    );
+  }
   // A new account has no Spaces until its owner picks the first one.
   if (spaces.length === 0) return <FirstSpaceStep />;
 
@@ -79,6 +101,7 @@ export function App() {
               <Route path="more/spaces" element={<SpacesPage />} />
               <Route path="more/categories" element={<CategoriesPage />} />
               <Route path="more/settings" element={<SettingsPage />} />
+              <Route path="more/import" element={<ImportPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           </Routes>

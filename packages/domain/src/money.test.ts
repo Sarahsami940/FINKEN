@@ -223,7 +223,7 @@ describe('integrity checks', () => {
     const c = ctx([shoes, first]);
     expect(refundedAmount(shoes.id, c.transactions)).toBe(500);
     expect(checkTransaction(draft('refund', 400, { refundOfId: shoes.id }), c)).toBeNull();
-    expect(checkTransaction(draft('refund', 401, { refundOfId: shoes.id }), c)).toMatch(/Only 400/);
+    expect(checkTransaction(draft('refund', 401, { refundOfId: shoes.id }), c)).toMatch(/Only 4 of/);
     // Editing the existing refund may use its own amount again.
     expect(checkTransaction(draft('refund', 900, { refundOfId: shoes.id }), c, first.id)).toBeNull();
   });
@@ -241,8 +241,8 @@ describe('integrity checks', () => {
     const c = ctx([tx('principal_in', 1000, { obligationId: o.id }), tx('principal_out', 700, { obligationId: o.id })], [o]);
     expect(checkTransaction(draft('principal_out', 100), c)).toMatch(/which loan/);
     expect(checkTransaction(draft('principal_out', 300, { obligationId: o.id }), c)).toBeNull();
-    expect(checkTransaction(draft('principal_out', 301, { obligationId: o.id }), c)).toMatch(/Only 300/);
-    expect(checkTransaction(draft('principal_in', 1, { obligationId: o.id }), c)).toMatch(/more than the 1,000 agreed/);
+    expect(checkTransaction(draft('principal_out', 301, { obligationId: o.id }), c)).toMatch(/Only 3 is/);
+    expect(checkTransaction(draft('principal_in', 1, { obligationId: o.id }), c)).toMatch(/more than the 10 agreed/);
   });
 
   it('stops loan repayments being booked as ordinary income or expenses', () => {
@@ -314,7 +314,7 @@ describe('people, loans and shared costs', () => {
     const dinner = tx('expense', 6000);
     const shares = [owe('receivable', 2000, { sourceTransactionId: dinner.id }), owe('receivable', 2000, { sourceTransactionId: dinner.id })];
     expect(sharedAmount(dinner.id, shares)).toBe(4000);
-    expect(checkTransaction(draft('expense', 3000), ctx([dinner], shares), dinner.id)).toMatch(/Other people owe you 4,000/);
+    expect(checkTransaction(draft('expense', 3000), ctx([dinner], shares), dinner.id)).toMatch(/Other people owe you 40 of/);
     expect(checkTransaction(draft('expense', 4000), ctx([dinner], shares), dinner.id)).toBeNull();
   });
 });
@@ -357,8 +357,9 @@ describe('demo data', () => {
       seed.transactions.filter((t) => t.spaceId === business.id),
       '2026-11-14',
     );
-    expect(owed.owedToYou).toBe(80000 + 65000);
-    expect(owed.youOwe).toBe(70000 + 350000);
+    // The demo is written in rupees and stored in paisa.
+    expect(owed.owedToYou).toBe((80000 + 65000) * 100);
+    expect(owed.youOwe).toBe((70000 + 350000) * 100);
     expect(owed.open.some((p) => p.overdue)).toBe(true);
   });
 });

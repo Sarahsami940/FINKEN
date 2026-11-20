@@ -23,6 +23,7 @@ import type {
   Transaction,
   TransactionType,
 } from './types';
+import { type MoneyCollection, recordToMinor } from './units';
 
 export interface SeedData {
   spaces: Space[];
@@ -547,17 +548,40 @@ export function buildSeed(ownerId: ID, now: ISODate = today()): SeedData {
     space(ids.family, 'Family', 'family', 'users', 'Shared household expenses.'),
   ];
   const parts = [seedPersonal(ids.personal, now), seedBusiness(ids.business, now), seedFamily(ids.family, now)];
+  // The demo is written in rupees for readability and stored in paisa, like everything else.
+  const minor = <C extends MoneyCollection>(c: C, items: object[]) => items.map((item) => recordToMinor(c, item)) as never;
   return {
     spaces,
-    accounts: parts.flatMap((p) => p.accounts),
+    accounts: minor(
+      'accounts',
+      parts.flatMap((p) => p.accounts),
+    ),
     categories: spaces.flatMap((s) => defaultCategories(s.id, s.type)),
-    transactions: parts.flatMap((p) => p.transactions),
-    recurring: parts.flatMap((p) => p.recurring),
+    transactions: minor(
+      'transactions',
+      parts.flatMap((p) => p.transactions),
+    ),
+    recurring: minor(
+      'recurring',
+      parts.flatMap((p) => p.recurring),
+    ),
     people: parts.flatMap((p) => p.people),
-    obligations: parts.flatMap((p) => p.obligations),
-    budgets: parts.flatMap((p) => p.budgets),
-    goals: parts.flatMap((p) => p.goals),
-    goalEntries: parts.flatMap((p) => p.goalEntries),
+    obligations: minor(
+      'obligations',
+      parts.flatMap((p) => p.obligations),
+    ),
+    budgets: minor(
+      'budgets',
+      parts.flatMap((p) => p.budgets),
+    ),
+    goals: minor(
+      'goals',
+      parts.flatMap((p) => p.goals),
+    ),
+    goalEntries: minor(
+      'goalEntries',
+      parts.flatMap((p) => p.goalEntries),
+    ),
     spaceIdByType: ids,
   };
 }

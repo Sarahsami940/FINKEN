@@ -7,9 +7,12 @@ import { Button } from '../components/ui/Button';
 import { cn } from '../components/ui/cn';
 import { Field, Input, Select } from '../components/ui/Field';
 import { iconFor } from '../components/ui/icons';
+import { type Account, account } from '../data/account';
 import { useAppState } from '../data/hooks';
+import { leaveFinken } from '../data/session';
 import { store } from '../data/store';
 import { LoginForm, PrototypeNotice, RegisterForm } from './AuthForms';
+import { MoveData } from './MoveData';
 
 function Wordmark({ className }: { className?: string }) {
   return (
@@ -22,7 +25,7 @@ function Wordmark({ className }: { className?: string }) {
 /** The five questions Finken exists to answer (from the product vision). */
 const QUESTIONS = ['Where is my money?', 'Where is it going?', "What's coming up?", 'What can I afford?', 'What should I do next?'];
 
-function Welcome({ onStart, onTry, onLogin }: { onStart: () => void; onTry: () => void; onLogin: () => void }) {
+function Welcome({ onStart, onTry, onLogin }: { onStart: () => void; onTry?: () => void; onLogin: () => void }) {
   return (
     <div className="grid min-h-dvh lg:grid-cols-2">
       <div className="flex flex-col px-6 py-6 sm:px-10 lg:px-16 lg:py-10">
@@ -36,11 +39,13 @@ function Welcome({ onStart, onTry, onLogin }: { onStart: () => void; onTry: () =
             <Button variant="primary" size="lg" block onClick={onStart}>
               Get Started
             </Button>
-            <Button size="lg" block onClick={onTry}>
-              Try Finken
-            </Button>
+            {onTry && (
+              <Button size="lg" block onClick={onTry}>
+                Try Finken
+              </Button>
+            )}
           </div>
-          <p className="mt-4 max-w-md text-sm text-ink-3">Try Finken opens a demo with sample data. No account needed — everything stays in this browser.</p>
+          {onTry && <p className="mt-4 max-w-md text-sm text-ink-3">Try Finken opens a demo with sample data. No account needed — everything stays in this browser.</p>}
           <p className="mt-6 text-sm text-ink-2">
             Already have an account?{' '}
             <button type="button" onClick={onLogin} className="font-bold text-accent hover:text-accent-strong">
@@ -199,7 +204,7 @@ export function FirstSpaceStep() {
   }
 
   return (
-    <Frame onBack={() => store.signOut()} backLabel="Log out">
+    <Frame onBack={() => void leaveFinken()} backLabel="Log out">
       <Heading
         title={user?.name ? `Welcome, ${user.name.split(' ')[0]}` : 'Welcome'}
         subtitle="What would you like to manage first? This becomes your first Space — you can add more later."
@@ -242,10 +247,71 @@ export function FirstSpaceStep() {
 
 type Step = 'welcome' | 'register' | 'login' | 'guest';
 
+/** Account mode: sign in to the account on Finken's server. */
+function AccountSignIn({ account, onBack }: { account: Account; onBack: () => void }) {
+  const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    const signedIn = await account.signIn(email, name);
+    const result = signedIn.ok ? await store.signInWithProvider() : signedIn;
+    setBusy(false);
+    if (!result.ok) return setError(result.error);
+    account.start();
+  }
+
+  return (
+    <Frame onBack={onBack}>
+      <Heading title="Sign in to Finken" subtitle="Your records are kept in your account, so they are on every device you sign in on, and still work offline." />
+      <form onSubmit={submit} noValidate className="space-y-4">
+        <Field label="Email">{(id) => <Input id={id} type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />}</Field>
+        <Field label="Your name" hint="Only needed the first time.">
+          {(id) => <Input id={id} autoComplete="name" maxLength={40} value={name} onChange={(e) => setName(e.target.value)} />}
+        </Field>
+        {error && (
+          <p role="alert" className="rounded-control bg-negative-soft px-3.5 py-2.5 text-sm font-semibold text-negative">
+            {error}
+          </p>
+        )}
+        <Button type="submit" variant="primary" size="lg" block disabled={busy || !email.trim()}>
+          {busy ? 'Signing in…' : 'Sign in'}
+        </Button>
+      </form>
+      <p className="mt-6 rounded-control bg-sunken px-3.5 py-3 text-[13px] leading-relaxed text-ink-2">
+        Development sign-in: there is no password yet. The real sign-in screen replaces this once the sign-in provider is chosen.
+      </p>
+    </Frame>
+  );
+}
+
+/** Straight after signing in: offer to bring in what this browser saved before accounts. */
+export function MoveDataStep({ account, onDone }: { account: Account; onDone: (choice: 'moved' | 'later') => void }) {
+  const { user } = useAppState();
+  return (
+    <Frame>
+      <Heading
+        title="Bring your data into your account"
+        subtitle="Finken found Spaces saved in this browser before you signed in. Choose which to move into your account, so they are on all your devices."
+      />
+      <MoveData account={account} email={user?.email} onDone={onDone} />
+    </Frame>
+  );
+}
+
 /** Everything a visitor sees before they are inside Finken. */
 export function Onboarding() {
   const [step, setStep] = useState<Step>('welcome');
   const [busy, setBusy] = useState(false);
+
+  if (account) {
+    if (step === 'welcome') return <Welcome onStart={() => setStep('login')} onLogin={() => setStep('login')} />;
+    return <AccountSignIn account={account} onBack={() => setStep('welcome')} />;
+  }
 
   if (step === 'welcome') {
     return <Welcome onStart={() => setStep('register')} onTry={() => setStep('guest')} onLogin={() => setStep('login')} />;

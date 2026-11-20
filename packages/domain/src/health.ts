@@ -7,6 +7,7 @@
  */
 import { budgetAdherence, completeMonths } from './analytics';
 import { addDays, diffDays, inRange, monthRange, today } from './dates';
+import { floorToMajor } from './format';
 import { owedSummary, owedToYouKind, summarize, totalBalance } from './money';
 import { budgetPeriod, budgetSpent, budgetStatus, goalStatus } from './planning';
 import type { Account, Budget, Goal, GoalEntry, ISODate, Obligation, Recurring, Transaction } from './types';
@@ -168,7 +169,7 @@ export function safeToSpend(input: PlanningInput, options: SafeToSpendOptions = 
     },
   ];
   const amount = lines.reduce((sum, l) => (!l.included ? sum : l.key === 'available' ? sum + l.amount : sum - l.amount), 0);
-  return { until, days, lines, amount, perDay: amount > 0 ? Math.floor(amount / days) : 0, expectedIn, events };
+  return { until, days, lines, amount, perDay: amount > 0 ? floorToMajor(amount / days) : 0, expectedIn, events };
 }
 
 // ── Money Health ───────────────────────────────────────────────────────────

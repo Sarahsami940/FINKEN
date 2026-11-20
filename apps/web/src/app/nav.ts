@@ -2,6 +2,7 @@ import {
   CalendarClock,
   ChartNoAxesColumn,
   Ellipsis,
+  FileUp,
   HandCoins,
   Handshake,
   House,
@@ -54,5 +55,6 @@ export const MORE_SECTIONS: (NavItem & { summary: string })[] = [
   { to: '/search', label: 'Search your money', icon: Search, summary: 'Ask in your own words: what you spent, who owes you, what is due.' },
   { to: '/more/spaces', label: 'Spaces', icon: Layers, summary: 'Keep personal, family and business money apart.' },
   { to: '/more/categories', label: 'Categories', icon: Tags, summary: 'How your income and spending are grouped.' },
+  { to: '/more/import', label: 'Import from a file', icon: FileUp, summary: 'Bring in a bank or wallet statement, or a spreadsheet, as a CSV file.' },
   { to: '/more/settings', label: 'Settings and profile', icon: Settings, summary: 'Your name, demo data and storage.' },
 ];

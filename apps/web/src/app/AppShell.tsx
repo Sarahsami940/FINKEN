@@ -1,9 +1,10 @@
-import { BriefcaseBusiness, ChevronDown, Info, Plus, Search, X } from 'lucide-react';
+import { BriefcaseBusiness, ChevronDown, Info, Plus, RefreshCw, Search, X } from 'lucide-react';
 import { Suspense, useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAddFlow } from '../components/money/AddFlow';
 import { cn } from '../components/ui/cn';
 import { useAppState } from '../data/hooks';
+import { applyUpdate, usePwa } from '../data/pwa';
 import { store } from '../data/store';
 import { CreateAccountDialog } from '../pages/SettingsPage';
 import { MONEY_SECTIONS, PRIMARY_NAV } from './nav';
@@ -128,10 +129,10 @@ function Sidebar() {
       {user && (
         <Link to="/more/settings" className="mt-4 flex items-center gap-3 rounded-2xl p-2 transition-colors hover:bg-sunken">
           <span aria-hidden className="flex size-9 items-center justify-center rounded-full bg-accent-soft text-sm font-bold text-accent-strong">
-            {user.name.trim().charAt(0).toUpperCase() || 'G'}
+            {(user.name.trim() || (user.isGuest ? 'Guest' : (user.email ?? 'Y'))).charAt(0).toUpperCase()}
           </span>
           <span className="min-w-0">
-            <span className="block truncate text-sm font-bold text-ink">{user.name || 'Guest'}</span>
+            <span className="block truncate text-sm font-bold text-ink">{user.name || (user.isGuest ? 'Guest' : 'Your account')}</span>
             <span className="block truncate text-xs text-ink-3">{user.isGuest ? 'Saved only in this browser' : user.email}</span>
           </span>
         </Link>
@@ -229,6 +230,23 @@ function StorageNotice() {
   );
 }
 
+/** A new version of Finken has downloaded: it starts when the person says so. */
+function UpdateNotice() {
+  const { updateReady } = usePwa();
+  if (!updateReady) return null;
+  return (
+    <div role="status" className="mb-5 flex items-center gap-3 rounded-card border border-accent/30 bg-accent-soft/50 px-4 py-3.5">
+      <RefreshCw aria-hidden className="size-[18px] shrink-0 text-accent" />
+      <p className="min-w-0 flex-1 text-sm text-ink-2">
+        <strong className="font-bold text-ink">A new version of Finken is ready.</strong> Everything you have saved stays as it is.
+      </p>
+      <button type="button" onClick={applyUpdate} className="shrink-0 rounded-control bg-ink px-3.5 py-2 text-sm font-bold text-white hover:bg-ink/88">
+        Reload
+      </button>
+    </div>
+  );
+}
+
 /** Tells guests, once, where their data lives and how to keep it. */
 function GuestNotice() {
   const { user, guestNoticeDismissed } = useAppState();
@@ -275,6 +293,7 @@ export function AppShell() {
       <MobileHeader />
       <main className="px-4 pb-32 pt-6 sm:px-6 lg:ml-64 lg:px-10 lg:pb-16 lg:pt-10">
         <div className="mx-auto max-w-6xl">
+          <UpdateNotice />
           <StorageNotice />
           <GuestNotice />
           <Suspense fallback={<PageLoading />}>

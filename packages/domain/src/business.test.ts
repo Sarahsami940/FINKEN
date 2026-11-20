@@ -204,12 +204,12 @@ describe('reports on the demo business', () => {
         key: 'revenue',
         title: 'Test',
         description: 'Has a "quote", and a comma',
-        sections: [{ title: 'S', columns: ['Name', 'Amount'], money: [1], rows: [['=SUM(A1)', 1234.5]] }],
+        sections: [{ title: 'S', columns: ['Name', 'Amount'], money: [1], rows: [['=SUM(A1)', 123450]] }],
       },
       { space: 'Shop', range: NOV, currency: 'PKR' },
     );
     expect(csv).toContain('"Has a ""quote"", and a comma"');
-    expect(csv).toContain("'=SUM(A1),1234.5");
+    expect(csv).toContain("'=SUM(A1),1234.50");
     expect(csv.split('\r\n')[2]).toBe('Period,2026-11-01,2026-11-30');
   });
 });

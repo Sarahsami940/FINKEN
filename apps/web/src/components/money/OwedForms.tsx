@@ -1,5 +1,5 @@
 import { today } from '@finken/domain/dates';
-import { currencySymbol, formatMoney } from '@finken/domain/format';
+import { currencySymbol, formatMoney, moneyToInput, parseMoney } from '@finken/domain/format';
 import { habits, obligationPosition, owedToYouKind, settlementType } from '@finken/domain/money';
 import type { Frequency, ID, Obligation, PersonRole, TransactionType } from '@finken/domain/types';
 import { type FormEvent, type ReactNode, useMemo, useState } from 'react';
@@ -10,6 +10,7 @@ import { Field, Input, Select, Textarea } from '../ui/Field';
 import { Segmented } from '../ui/Misc';
 import { Modal } from '../ui/Modal';
 import { useToast } from '../ui/Toast';
+import { useRequestId } from '../ui/useRequestId';
 
 export const NEW_PERSON = '__new__';
 
@@ -164,6 +165,7 @@ export function ReceivePayForm({
   /** Start with this amount instead of everything still outstanding. */
   amount?: number;
 }) {
+  const [requestId, nextRequest] = useRequestId();
   const state = useAppState();
   const toast = useToast();
   const spaceId = settle?.spaceId ?? state.activeSpaceId ?? '';
@@ -175,7 +177,7 @@ export function ReceivePayForm({
   const isBusiness = space?.type === 'business';
   // In a business, money comes from customers and goes to suppliers.
   const role: PersonRole | undefined = isBusiness ? (direction === 'received' ? 'customer' : 'supplier') : undefined;
-  const [amount, setAmount] = useState(() => (presetAmount ? String(presetAmount) : settle ? String(obligationPosition(settle, state.transactions).outstanding) : ''));
+  const [amount, setAmount] = useState(() => (presetAmount ? moneyToInput(presetAmount) : settle ? moneyToInput(obligationPosition(settle, state.transactions).outstanding) : ''));
   const [personId, setPersonId] = useState<string>(settle?.personId ?? people[0]?.id ?? NEW_PERSON);
   const [newName, setNewName] = useState('');
   const [obligationId, setObligationId] = useState(settle?.id ?? '');
@@ -218,7 +220,7 @@ export function ReceivePayForm({
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    const value = Number(amount);
+    const value = parseMoney(amount);
     if (!Number.isFinite(value) || value <= 0) return setError('Enter an amount greater than zero.');
     if (!account) return setError('Choose an account.');
     const person = resolvePerson(spaceId, personId, newName, role);
@@ -226,24 +228,32 @@ export function ReceivePayForm({
 
     const fallback = direction === 'received' ? `Received from ${person.name}` : `Paid to ${person.name}`;
     const result = linked
-      ? store.settleObligation(linked.obligation.id, {
-          amount: value,
-          date,
-          accountId: account.id,
-          description: description.trim() || undefined,
-          categoryId: needsCategory ? category?.id : undefined,
-        })
-      : store.addTransaction({
-          spaceId,
-          type,
-          amount: value,
-          date,
-          description: description.trim() || fallback,
-          accountId: account.id,
-          categoryId: category?.id,
-          personId: person.id,
-        });
+      ? store.settleObligation(
+          linked.obligation.id,
+          {
+            amount: value,
+            date,
+            accountId: account.id,
+            description: description.trim() || undefined,
+            categoryId: needsCategory ? category?.id : undefined,
+          },
+          requestId,
+        )
+      : store.addTransaction(
+          {
+            spaceId,
+            type,
+            amount: value,
+            date,
+            description: description.trim() || fallback,
+            accountId: account.id,
+            categoryId: category?.id,
+            personId: person.id,
+          },
+          requestId,
+        );
     if (!result.ok) return setError(result.error);
+    nextRequest();
     toast(direction === 'received' ? `${formatMoney(value, currency)} received from ${person.name}` : `${formatMoney(value, currency)} paid to ${person.name}`);
     onClose();
   }
@@ -322,7 +332,7 @@ export function ReceivePayForm({
                 setError(null);
                 // Picking what it is for suggests the amount still outstanding.
                 const picked = related.find((p) => p.obligation.id === e.target.value);
-                if (picked && !amount) setAmount(String(picked.outstanding));
+                if (picked && !amount) setAmount(moneyToInput(picked.outstanding));
               }}
             >
               <option value="">Something else</option>
@@ -380,6 +390,7 @@ type LoanDirection = 'borrowed' | 'lent';
 
 /** Loan: money borrowed or lent, tracked until it is paid back. */
 export function LoanForm({ onClose, personId: presetPerson }: { onClose: () => void; personId?: ID }) {
+  const [requestId, nextRequest] = useRequestId();
   const state = useAppState();
   const toast = useToast();
   const spaceId = state.activeSpaceId ?? '';
@@ -404,7 +415,7 @@ export function LoanForm({ onClose, personId: presetPerson }: { onClose: () => v
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    const value = Number(amount);
+    const value = parseMoney(amount);
     if (!Number.isFinite(value) || value <= 0) return setError('Enter an amount greater than zero.');
     if (!accountId) return setError('Choose an account.');
     if (dueDate && dueDate < date) return setError('The repayment date cannot be before the loan itself.');
@@ -423,12 +434,14 @@ export function LoanForm({ onClose, personId: presetPerson }: { onClose: () => v
         dueDate: dueDate || undefined,
         notes,
         interestRate: interest ? Number(interest) : undefined,
-        instalmentAmount: instalment ? Number(instalment) : undefined,
+        instalmentAmount: instalment ? parseMoney(instalment) : undefined,
         instalmentFrequency: instalment ? frequency : undefined,
       },
       { accountId },
+      requestId,
     );
     if (!result.ok) return setError(result.error);
+    nextRequest();
     toast(direction === 'borrowed' ? `${formatMoney(value, currency)} borrowed from ${person.name}` : `${formatMoney(value, currency)} lent to ${person.name}`);
     onClose();
   }

@@ -7,8 +7,8 @@
  * that only become transactions when the user confirms them.
  */
 import { addDays, addMonths, diffDays, inRange, monthRange, parseISODate, today, toISODate, weekRange } from './dates';
-import { formatMoney } from './format';
-import type { Budget, DateRange, Goal, GoalEntry, ISODate, Recurring, Transaction } from './types';
+import { formatMoney, MINOR_UNITS } from './format';
+import type { Budget, DateRange, Goal, GoalEntry, ID, ISODate, Recurring, Transaction } from './types';
 
 // ── Budgets ────────────────────────────────────────────────────────────────
 
@@ -173,7 +173,7 @@ export function goalStatus(goal: Goal, entries: GoalEntry[], anchor: ISODate = t
   if (goal.targetDate && !reached && !late) {
     // Part of a month still needs a full month's saving, so round up, and never divide by zero.
     monthsLeft = Math.max(1, Math.ceil(diffDays(anchor, goal.targetDate) / 30.4375));
-    monthlyNeeded = Math.ceil(remaining / monthsLeft);
+    monthlyNeeded = Math.ceil(remaining / monthsLeft / MINOR_UNITS) * MINOR_UNITS;
   }
   return { goal, saved, remaining, progress: goal.targetAmount > 0 ? Math.min(1, saved / goal.targetAmount) : 0, reached, monthlyNeeded, monthsLeft, late };
 }
@@ -281,4 +281,13 @@ export function budgetHistory(budget: Budget, transactions: Transaction[], ancho
     out.push({ range, spent, used: budget.amount > 0 ? spent / budget.amount : 0, current: i === 0 });
   }
   return out;
+}
+
+/**
+ * The id of the transaction that pays one occurrence of a recurring item.
+ * Marking the same occurrence paid twice gives the same id, so it is only
+ * ever recorded once.
+ */
+export function occurrenceId(recurringId: ID, dueDate: ISODate): ID {
+  return `${recurringId}@${dueDate}`;
 }

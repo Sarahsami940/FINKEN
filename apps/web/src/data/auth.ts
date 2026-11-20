@@ -1,3 +1,4 @@
+import { deviceTimeZone } from '@finken/domain/dates';
 /**
  * Authentication for the prototype.
  *
@@ -42,6 +43,8 @@ export interface AuthService {
   ensureGuest(): Promise<User>;
   updateUser(user: User): Promise<void>;
   removeUser(id: ID): Promise<void>;
+  /** For sign-in through a provider: whoever the provider says is signed in now. */
+  current?(): Promise<User | null>;
 }
 
 export const MIN_PASSWORD_LENGTH = 8;
@@ -96,7 +99,7 @@ export class LocalAuthService implements AuthService {
     }
     const salt = toBase64(crypto.getRandomValues(new Uint8Array(16)));
     const hash = await hashPassword(input.password, salt);
-    const user: User = { id: crypto.randomUUID(), name: input.name.trim(), email, isGuest: false };
+    const user: User = { id: crypto.randomUUID(), name: input.name.trim(), email, isGuest: false, timeZone: deviceTimeZone() };
     await this.storage.put('users', user);
     await this.storage.put<Credential>('credentials', { id: user.id, email: email.toLowerCase(), salt, hash });
     return user;
@@ -120,7 +123,7 @@ export class LocalAuthService implements AuthService {
   async ensureGuest(): Promise<User> {
     const existing = await this.getUser(GUEST_ID);
     if (existing) return existing;
-    const guest: User = { id: GUEST_ID, name: '', isGuest: true };
+    const guest: User = { id: GUEST_ID, name: '', isGuest: true, timeZone: deviceTimeZone() };
     await this.storage.put('users', guest);
     return guest;
   }

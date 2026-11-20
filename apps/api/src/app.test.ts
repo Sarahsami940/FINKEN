@@ -8,6 +8,9 @@ import type { Db } from './db';
 import { migrate } from './migrate';
 import { testDb } from './testing';
 
+const TEST_CONFIG = { NODE_ENV: 'test', LOG_LEVEL: 'silent', AUTH_MODE: 'dev', AUTH_DEV_SECRET: 'x'.repeat(32) } as const;
+const SECRET = { AUTH_DEV_SECRET: 'x'.repeat(32) };
+
 let db: Db;
 beforeAll(async () => {
   db = await testDb();
@@ -17,8 +20,34 @@ afterAll(() => db.close());
 describe('config', () => {
   it('needs a Postgres DATABASE_URL and fills in defaults', () => {
     expect(() => loadConfig({})).toThrow(/DATABASE_URL/);
-    expect(() => loadConfig({ DATABASE_URL: 'mysql://x' })).toThrow(/DATABASE_URL/);
-    expect(loadConfig({ DATABASE_URL: 'postgres://u:p@localhost:5432/db' })).toMatchObject({ NODE_ENV: 'development', PORT: 4000 });
+    expect(() => loadConfig({ DATABASE_URL: 'mysql://x', ...SECRET })).toThrow(/DATABASE_URL/);
+    expect(loadConfig({ DATABASE_URL: 'postgres://u:p@localhost:5432/db', ...SECRET })).toMatchObject({ NODE_ENV: 'development', PORT: 4000, AUTH_MODE: 'dev' });
+  });
+
+  it('never allows development sign-in in staging or production, and needs provider settings there', () => {
+    const db = 'postgres://u:p@localhost:5432/db';
+    expect(() => loadConfig({ DATABASE_URL: db, NODE_ENV: 'production', AUTH_MODE: 'dev', ...SECRET })).toThrow(/never allowed/);
+    expect(() => loadConfig({ DATABASE_URL: db, NODE_ENV: 'staging', AUTH_MODE: 'oidc' })).toThrow(/AUTH_ISSUER/);
+    expect(() =>
+      loadConfig({
+        DATABASE_URL: db,
+        NODE_ENV: 'production',
+        AUTH_MODE: 'oidc',
+        AUTH_ISSUER: 'https://id.example.com/',
+        AUTH_AUDIENCE: 'finken',
+        AUTH_JWKS_URL: 'http://id.example.com/keys',
+      }),
+    ).toThrow(/AUTH_JWKS_URL/);
+    expect(
+      loadConfig({
+        DATABASE_URL: db,
+        NODE_ENV: 'production',
+        AUTH_MODE: 'oidc',
+        AUTH_ISSUER: 'https://id.example.com/',
+        AUTH_AUDIENCE: 'finken',
+        AUTH_JWKS_URL: 'https://id.example.com/keys',
+      }).AUTH_MODE,
+    ).toBe('oidc');
   });
 
   it('never echoes values in its error', () => {
@@ -56,7 +85,7 @@ describe('migrations', () => {
 
 describe('health endpoints', () => {
   it('report liveness and database readiness', async () => {
-    const app = buildApp({ db, config: { NODE_ENV: 'test', LOG_LEVEL: 'silent' } });
+    const app = buildApp({ db, config: TEST_CONFIG });
     expect((await app.inject('/health')).json()).toEqual({ status: 'ok' });
     expect((await app.inject('/ready')).statusCode).toBe(200);
     await app.close();
@@ -64,7 +93,7 @@ describe('health endpoints', () => {
 
   it('say unavailable when the database cannot be reached', async () => {
     const broken: Db = { ...db, query: () => Promise.reject(new Error('down')) };
-    const app = buildApp({ db: broken, config: { NODE_ENV: 'test', LOG_LEVEL: 'silent' } });
+    const app = buildApp({ db: broken, config: TEST_CONFIG });
     const res = await app.inject('/ready');
     expect([res.statusCode, res.json()]).toEqual([503, { status: 'unavailable' }]);
     await app.close();

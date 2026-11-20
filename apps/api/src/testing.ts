@@ -1,9 +1,14 @@
 import { PGlite, type Transaction } from '@electric-sql/pglite';
 import type { Db } from './db';
 
-/** An in-memory Postgres for tests. Same SQL dialect and constraints as production. */
-export async function testDb(): Promise<Db> {
-  const pg = await PGlite.create();
+export interface TestDb extends Db {
+  /** A full copy of the database files: a backup, as far as tests are concerned. */
+  backup(): Promise<Blob>;
+}
+
+/** An in-memory Postgres for tests. Same SQL dialect and constraints as production. Pass a backup to start from it. */
+export async function testDb(restoreFrom?: Blob): Promise<TestDb> {
+  const pg = await PGlite.create(restoreFrom ? { loadDataDir: restoreFrom } : {});
   const wrap = (c: PGlite | Transaction): Db => ({
     query: async (sql, params) => (await c.query(sql, params)).rows as never,
     exec: async (sql) => {
@@ -15,5 +20,5 @@ export async function testDb(): Promise<Db> {
     },
     close: () => pg.close(),
   });
-  return wrap(pg);
+  return { ...wrap(pg), backup: () => pg.dumpDataDir('none') };
 }

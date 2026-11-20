@@ -45,8 +45,11 @@ jobs:
           --health-cmd "pg_isready -U finken -d finken"
           --health-interval 5s --health-timeout 3s --health-retries 10
     env:
-      NODE_ENV: test
+      # development, so the API writes its logs (checked below) and offers development sign-in for the load test.
+      NODE_ENV: development
       DATABASE_URL: postgres://finken:finken@localhost:5432/finken
+      AUTH_MODE: dev
+      AUTH_DEV_SECRET: ci-only-development-secret-not-used-anywhere-else
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -63,9 +66,50 @@ jobs:
       - name: API starts and reaches the database
         working-directory: apps/api
         run: |
-          node dist/server.js &
+          node dist/server.js > ../../api.log 2>&1 &
           for i in $(seq 1 20); do curl -fsS http://127.0.0.1:4000/ready && exit 0; sleep 1; done
           exit 1
+      - name: Load test on real Postgres (every expense once, balances right, p95 under 300 ms)
+        env:
+          LOAD_API_URL: http://127.0.0.1:4000
+          LOAD_USERS: 5
+        run: npm run load -w @finken/e2e
+      - name: Reconciliation finds nothing wrong
+        working-directory: apps/api
+        run: node dist/reconcile.js
+      - name: Restore drill (back up, restore into a new database, check it matches)
+        run: |
+          pg=$(docker ps -q --filter ancestor=postgres:18-alpine)
+          docker exec "$pg" pg_dump -U finken -Fc finken -f /tmp/finken.dump
+          docker exec "$pg" createdb -U finken finken_restore
+          docker exec "$pg" pg_restore -U finken -d finken_restore --no-owner /tmp/finken.dump
+          cd apps/api
+          DATABASE_URL=postgres://finken:finken@localhost:5432/finken_restore SOURCE_DATABASE_URL="$DATABASE_URL" node dist/restore.js
+      - name: Logs never hold tokens or emails
+        if: always()
+        run: |
+          ! grep -E "Bearer |@example\.com" api.log
+
+  browser:
+    name: Browser and accessibility tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+        working-directory: tests/browser
+      - run: npm run test:browser
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: tests/browser/playwright-report
+          retention-days: 7
 
   image:
     name: API container builds

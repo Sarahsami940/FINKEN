@@ -1,5 +1,5 @@
 import { formatDay, formatDueLabel, today } from '@finken/domain/dates';
-import { currencySymbol, formatMoney, formatPercent } from '@finken/domain/format';
+import { currencySymbol, formatMoney, formatPercent, moneyToInput, parseMoney } from '@finken/domain/format';
 import { obligationPosition, owedToYouKind } from '@finken/domain/money';
 import {
   type BudgetAlert,
@@ -11,6 +11,7 @@ import {
   goalStatus,
   monthlyEquivalent,
   needsAttention,
+  occurrenceId,
 } from '@finken/domain/planning';
 import type { Budget, BudgetFrequency, Goal, ID, Recurring, RecurringFrequency } from '@finken/domain/types';
 import { Check, Minus, Pause, PiggyBank, Play, Plus, Repeat, SkipForward, Target, Trash2, X } from 'lucide-react';
@@ -27,6 +28,7 @@ import { iconFor } from '../components/ui/icons';
 import { Badge, EmptyState, PageHeader, ProgressBar, Segmented } from '../components/ui/Misc';
 import { ConfirmDialog, Modal } from '../components/ui/Modal';
 import { useToast } from '../components/ui/Toast';
+import { useRequestId } from '../components/ui/useRequestId';
 import { useSpaceData, useSpaceRecords } from '../data/hooks';
 import { store } from '../data/store';
 import { BackLink } from './MoneyPages';
@@ -58,7 +60,7 @@ function BudgetEditor({ spaceId, currency, budget, onClose }: { spaceId: ID; cur
   const toast = useToast();
   const expense = categories.filter((c) => c.kind === 'expense');
   const [name, setName] = useState<string | null>(budget?.name ?? null);
-  const [amount, setAmount] = useState(budget ? String(budget.amount) : '');
+  const [amount, setAmount] = useState(budget ? moneyToInput(budget.amount) : '');
   const [categoryId, setCategoryId] = useState(budget?.categoryId ?? '');
   const [subcategoryId, setSubcategoryId] = useState(budget?.subcategoryId ?? '');
   const [frequency, setFrequency] = useState<BudgetFrequency>(budget?.frequency ?? 'monthly');
@@ -76,7 +78,7 @@ function BudgetEditor({ spaceId, currency, budget, onClose }: { spaceId: ID; cur
     e.preventDefault();
     const draft = {
       name: shownName,
-      amount: Number(amount),
+      amount: parseMoney(amount),
       frequency,
       startDate,
       endDate: endDate || undefined,
@@ -363,7 +365,7 @@ const GOAL_IDEAS: [name: string, icon: string][] = [
 function GoalEditor({ spaceId, currency, goal, onClose }: { spaceId: ID; currency: string; goal: Goal | null; onClose: () => void }) {
   const toast = useToast();
   const [name, setName] = useState(goal?.name ?? '');
-  const [target, setTarget] = useState(goal ? String(goal.targetAmount) : '');
+  const [target, setTarget] = useState(goal ? moneyToInput(goal.targetAmount) : '');
   const [saved, setSaved] = useState('');
   const [targetDate, setTargetDate] = useState(goal?.targetDate ?? '');
   const [icon, setIcon] = useState(goal?.icon ?? 'coins');
@@ -372,8 +374,8 @@ function GoalEditor({ spaceId, currency, goal, onClose }: { spaceId: ID; currenc
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    const draft = { name, targetAmount: Number(target), targetDate: targetDate || undefined, icon, description };
-    const result = goal ? store.updateGoal(goal.id, draft) : store.addGoal(spaceId, draft, saved ? Number(saved) : 0);
+    const draft = { name, targetAmount: parseMoney(target), targetDate: targetDate || undefined, icon, description };
+    const result = goal ? store.updateGoal(goal.id, draft) : store.addGoal(spaceId, draft, saved ? parseMoney(saved) : 0);
     if (!result.ok) return setError(result.error);
     toast(goal ? 'Goal updated' : `${name.trim()} goal created`);
     onClose();
@@ -486,6 +488,7 @@ function goalLine(s: GoalStatus, currency: string): { text: string; tone: string
 type GoalAction = 'add' | 'take' | 'edit' | 'delete' | null;
 
 function GoalSheet({ goalId, onClose }: { goalId: ID | null; onClose: () => void }) {
+  const [requestId, nextRequest] = useRequestId();
   const { currency, goals, goalEntries, space } = useSpaceData();
   const toast = useToast();
   const [action, setAction] = useState<GoalAction>(null);
@@ -512,10 +515,11 @@ function GoalSheet({ goalId, onClose }: { goalId: ID | null; onClose: () => void
 
   function save(e: FormEvent) {
     e.preventDefault();
-    const value = Number(amount);
+    const value = parseMoney(amount);
     if (!Number.isFinite(value) || value <= 0) return setError('Enter an amount greater than zero.');
-    const result = store.addGoalEntry(goal!.id, { amount: action === 'take' ? -value : value, date, note });
+    const result = store.addGoalEntry(goal!.id, { amount: action === 'take' ? -value : value, date, note }, requestId);
     if (!result.ok) return setError(result.error);
+    nextRequest();
     toast(action === 'take' ? `${money(value)} taken out of ${goal!.name}` : `${money(value)} added to ${goal!.name}`);
     setAction(null);
   }
@@ -769,7 +773,7 @@ export function RecurringEditor({ spaceId, currency, item, onClose }: { spaceId:
   const toast = useToast();
   const [type, setType] = useState<'expense' | 'income'>(item?.type ?? 'expense');
   const [name, setName] = useState(item?.name ?? '');
-  const [amount, setAmount] = useState(item ? String(item.amount) : '');
+  const [amount, setAmount] = useState(item ? moneyToInput(item.amount) : '');
   const [categoryId, setCategoryId] = useState(item?.categoryId ?? '');
   const [obligationId, setObligationId] = useState(item?.obligationId ?? '');
   const [accountId, setAccountId] = useState(item?.accountId ?? '');
@@ -795,7 +799,7 @@ export function RecurringEditor({ spaceId, currency, item, onClose }: { spaceId:
     e.preventDefault();
     const draft = {
       name,
-      amount: Number(amount),
+      amount: parseMoney(amount),
       type,
       accountId: account?.id ?? '',
       frequency,
@@ -1045,7 +1049,7 @@ export function RecurringPage() {
   function confirm() {
     if (!confirming) return;
     const r = confirming;
-    const saved = store.confirmRecurring(r.id);
+    const saved = store.confirmRecurring(r.id, undefined, undefined, occurrenceId(r.id, r.nextDueDate));
     setConfirming(null);
     if (saved.ok) toast(r.type === 'income' ? `${r.name} marked as received` : `${r.name} marked as paid`);
     else toast(saved.error, { tone: 'error' });

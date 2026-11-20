@@ -7,3 +7,6 @@ dist
 .env
 .env.*
 !.env.example
+!apps/web/.env.account
+tests/browser/test-results/
+tests/browser/playwright-report/
