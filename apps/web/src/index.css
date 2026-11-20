@@ -17,7 +17,7 @@
 
   --color-ink: #17191e;
   --color-ink-2: #474b54;
-  --color-ink-3: #6a6f79;
+  --color-ink-3: #646973;
 
   --color-accent: #2f45c5;
   --color-accent-strong: #2437a3;
@@ -27,7 +27,7 @@
   --color-positive-soft: #e1f2e9;
   --color-negative: #bd382e;
   --color-negative-soft: #fae7e4;
-  --color-warning: #a2640c;
+  --color-warning: #94590a;
   --color-warning-soft: #f8eedb;
 
   --radius-control: 0.75rem;
@@ -109,5 +109,32 @@
     animation-duration: 0.01ms !important;
     /* biome-ignore lint/complexity/noImportantStyles: reduced motion must win over every component */
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* Printing a business report (or saving it as a PDF): only the report shows. */
+@media print {
+  body:has([data-print-report]) * {
+    visibility: hidden;
+  }
+  body:has([data-print-report]) [data-print-report],
+  body:has([data-print-report]) [data-print-report] * {
+    visibility: visible;
+  }
+  body:has([data-print-report]) [data-print-report] {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    border: 0;
+    box-shadow: none;
+  }
+  body {
+    background: #fff;
+  }
+  [data-print-report] table {
+    page-break-inside: auto;
+  }
+  [data-print-report] tr {
+    page-break-inside: avoid;
   }
 }

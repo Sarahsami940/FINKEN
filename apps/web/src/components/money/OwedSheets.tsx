@@ -1,5 +1,5 @@
 import { formatDay, formatDueLabel, today } from '@finken/domain/dates';
-import { currencySymbol, formatMoney } from '@finken/domain/format';
+import { currencySymbol, formatMoney, moneyToInput, parseMoney } from '@finken/domain/format';
 import { habits, interestPaid, obligationPosition, obligationStatus, owedToYouKind, sharedAmount, sortByDateDesc, splitEqually, transactionLabel } from '@finken/domain/money';
 import type { Frequency, ID, Obligation, ObligationKind, Person, PersonRole, Transaction } from '@finken/domain/types';
 import { Ban, Pencil, Percent, RotateCcw, Trash2, Wallet } from 'lucide-react';
@@ -12,6 +12,7 @@ import { Field, Input, Select, Textarea } from '../ui/Field';
 import { Badge, ProgressBar, Segmented } from '../ui/Misc';
 import { ConfirmDialog, Modal } from '../ui/Modal';
 import { useToast } from '../ui/Toast';
+import { useRequestId } from '../ui/useRequestId';
 import { useAddFlow } from './AddFlow';
 import { AmountInput, cleanAmount, FormShell, LoanTerms, NEW_PERSON, PersonPicker, ReceivePayForm, resolvePerson } from './OwedForms';
 
@@ -38,6 +39,7 @@ interface EditorProps {
 
 /** Creates a receivable or payable, or edits the terms of any obligation. */
 export function ObligationEditor({ obligation, kind: newKind = 'receivable', personId: presetPerson, onClose }: EditorProps) {
+  const [requestId, nextRequest] = useRequestId();
   const state = useAppState();
   const toast = useToast();
   const kind = obligation?.kind ?? newKind;
@@ -48,7 +50,7 @@ export function ObligationEditor({ obligation, kind: newKind = 'receivable', per
   const isLoan = kind === 'lent' || kind === 'borrowed';
   const toYou = owedToYouKind(kind);
 
-  const [amount, setAmount] = useState(obligation ? String(obligation.amount) : '');
+  const [amount, setAmount] = useState(obligation ? moneyToInput(obligation.amount) : '');
   const [personId, setPersonId] = useState<string>(obligation?.personId ?? presetPerson ?? people[0]?.id ?? NEW_PERSON);
   const [newName, setNewName] = useState('');
   const [title, setTitle] = useState(obligation?.title ?? '');
@@ -56,13 +58,13 @@ export function ObligationEditor({ obligation, kind: newKind = 'receivable', per
   const [dueDate, setDueDate] = useState(obligation?.dueDate ?? '');
   const [notes, setNotes] = useState(obligation?.notes ?? '');
   const [interest, setInterest] = useState(obligation?.interestRate ? String(obligation.interestRate) : '');
-  const [instalment, setInstalment] = useState(obligation?.instalmentAmount ? String(obligation.instalmentAmount) : '');
+  const [instalment, setInstalment] = useState(obligation?.instalmentAmount ? moneyToInput(obligation.instalmentAmount) : '');
   const [frequency, setFrequency] = useState<Frequency>(obligation?.instalmentFrequency ?? 'monthly');
   const [error, setError] = useState<string | null>(null);
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    const value = Number(amount);
+    const value = parseMoney(amount);
     if (!Number.isFinite(value) || value <= 0) return setError('Enter an amount greater than zero.');
     if (!title.trim()) return setError('Add a short description, such as what it is for.');
     const terms = {
@@ -72,7 +74,7 @@ export function ObligationEditor({ obligation, kind: newKind = 'receivable', per
       dueDate: dueDate || undefined,
       notes,
       interestRate: isLoan && interest ? Number(interest) : undefined,
-      instalmentAmount: isLoan && instalment ? Number(instalment) : undefined,
+      instalmentAmount: isLoan && instalment ? parseMoney(instalment) : undefined,
       instalmentFrequency: isLoan && instalment ? frequency : undefined,
     };
     if (obligation) {
@@ -89,8 +91,9 @@ export function ObligationEditor({ obligation, kind: newKind = 'receivable', per
       space?.type === 'business' ? (kind === 'receivable' ? 'customer' : kind === 'payable' ? 'supplier' : 'lender') : undefined,
     );
     if (!person.ok) return setError(person.error);
-    const result = store.addObligation({ spaceId, kind, personId: person.id, ...terms });
+    const result = store.addObligation({ spaceId, kind, personId: person.id, ...terms }, undefined, requestId);
     if (!result.ok) return setError(result.error);
+    nextRequest();
     toast(toYou ? `${person.name} owes you ${formatMoney(value, currency)}` : `You owe ${person.name} ${formatMoney(value, currency)}`);
     onClose();
   }
@@ -169,6 +172,7 @@ export function ObligationEditor({ obligation, kind: newKind = 'receivable', per
 // ── Interest ───────────────────────────────────────────────────────────────
 
 function InterestForm({ obligation, onClose }: { obligation: Obligation; onClose: () => void }) {
+  const [requestId, nextRequest] = useRequestId();
   const state = useAppState();
   const toast = useToast();
   const borrowed = obligation.kind === 'borrowed';
@@ -192,8 +196,9 @@ function InterestForm({ obligation, onClose }: { obligation: Obligation; onClose
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    const result = store.recordInterest(obligation.id, { amount: Number(amount), date, accountId, categoryId: categoryId || undefined });
+    const result = store.recordInterest(obligation.id, { amount: parseMoney(amount), date, accountId, categoryId: categoryId || undefined }, requestId);
     if (!result.ok) return setError(result.error);
+    nextRequest();
     toast('Interest recorded');
     onClose();
   }
@@ -520,7 +525,7 @@ export function SplitForm({ expense, onClose }: { expense: Transaction; onClose:
   const already = sharedAmount(expense.id, state.obligations);
   const available = expense.amount - already;
   const taken = new Set(state.obligations.filter((o) => o.sourceTransactionId === expense.id && o.status !== 'cancelled').map((o) => o.personId));
-  const unit = Number.isInteger(expense.amount) ? 1 : 0.01;
+  const unit = expense.amount % 100 === 0 ? 100 : 1;
 
   const [chosen, setChosen] = useState<ID[]>([]);
   /** Amounts typed by hand; anyone not listed here gets an equal share. */
@@ -533,7 +538,7 @@ export function SplitForm({ expense, onClose }: { expense: Transaction; onClose:
   const isCustom = Object.keys(custom).length > 0;
   // An equal split divides what is left between everyone taking part, you included.
   const equal = splitEqually(available, chosen.length + (includeMe ? 1 : 0), unit);
-  const shareOf = (id: ID, index: number) => (isCustom ? Number(custom[id] ?? 0) : (equal[index + (includeMe ? 1 : 0)] ?? 0));
+  const shareOf = (id: ID, index: number) => (isCustom ? parseMoney(custom[id] || '0') : (equal[index + (includeMe ? 1 : 0)] ?? 0));
   const othersTotal = chosen.reduce((sum, id, i) => sum + shareOf(id, i), 0);
   const yours = available - othersTotal;
 
@@ -661,10 +666,10 @@ export function SplitForm({ expense, onClose }: { expense: Transaction; onClose:
                     aria-label={`${person?.name ?? 'Their'} share`}
                     inputMode="decimal"
                     autoComplete="off"
-                    value={isCustom ? (custom[id] ?? '') : String(value)}
+                    value={isCustom ? (custom[id] ?? '') : moneyToInput(value)}
                     onChange={(e) => {
                       // Typing one amount fixes everyone's amounts where they are, so nothing shifts under the user.
-                      const base = isCustom ? custom : Object.fromEntries(chosen.map((cid, ci) => [cid, String(shareOf(cid, ci))]));
+                      const base = isCustom ? custom : Object.fromEntries(chosen.map((cid, ci) => [cid, moneyToInput(shareOf(cid, ci))]));
                       setCustom({ ...base, [id]: cleanAmount(e.target.value) });
                       setError(null);
                     }}

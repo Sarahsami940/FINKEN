@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { createContext, type FormEvent, type ReactNode, useCallback, useContext, useMemo, useState } from 'react';
 import { useAppState } from '../../data/hooks';
-import { store } from '../../data/store';
+import { store, VIEW_ONLY } from '../../data/store';
 import { Button } from '../ui/Button';
 import { cn } from '../ui/cn';
 import { ConfirmDialog, Modal } from '../ui/Modal';
@@ -39,9 +39,11 @@ interface AddFlow {
   openMenu: () => void;
   openForm: (type: TransactionType) => void;
   openDetail: (id: ID) => void;
+  /** False in a Space shared with the person to view only: adding is explained instead of opened. */
+  canAdd: boolean;
 }
 
-const AddFlowContext = createContext<AddFlow>({ openMenu: () => {}, openForm: () => {}, openDetail: () => {} });
+const AddFlowContext = createContext<AddFlow>({ openMenu: () => {}, openForm: () => {}, openDetail: () => {}, canAdd: true });
 
 export function useAddFlow(): AddFlow {
   return useContext(AddFlowContext);
@@ -126,9 +128,11 @@ export function AddFlowProvider({ children }: { children: ReactNode }) {
   const [owedForm, setOwedForm] = useState<OwedForm | null>(null);
   const [detailId, setDetailId] = useState<ID | null>(null);
   const [formKey, setFormKey] = useState(0);
-  const { spaces, activeSpaceId } = useAppState();
+  const { spaces, activeSpaceId, roles } = useAppState();
   const isBusiness = spaces.find((sp) => sp.id === activeSpaceId)?.type === 'business';
   const actions = isBusiness ? BUSINESS_ACTIONS : ACTIONS;
+  const canAdd = roles[activeSpaceId ?? ''] !== 'viewer';
+  const toast = useToast();
 
   /** Reads a typed sentence against the active Space and opens the confirmation form. */
   function capture(text: string) {
@@ -142,13 +146,18 @@ export function AddFlowProvider({ children }: { children: ReactNode }) {
     setForm({ type: result.type, capture: result });
   }
 
-  const openMenu = useCallback(() => setMenuOpen(true), []);
-  const openForm = useCallback((type: TransactionType) => {
-    setMenuOpen(false);
-    setForm({ type });
-  }, []);
+  // In a view-only Space every way in to adding says why, rather than opening a form that cannot save.
+  const openMenu = useCallback(() => (canAdd ? setMenuOpen(true) : toast(VIEW_ONLY, { tone: 'error' })), [canAdd, toast]);
+  const openForm = useCallback(
+    (type: TransactionType) => {
+      setMenuOpen(false);
+      if (!canAdd) return toast(VIEW_ONLY, { tone: 'error' });
+      setForm({ type });
+    },
+    [canAdd, toast],
+  );
   const openDetail = useCallback((id: ID) => setDetailId(id), []);
-  const value = useMemo(() => ({ openMenu, openForm, openDetail }), [openMenu, openForm, openDetail]);
+  const value = useMemo(() => ({ openMenu, openForm, openDetail, canAdd }), [openMenu, openForm, openDetail, canAdd]);
 
   return (
     <AddFlowContext.Provider value={value}>

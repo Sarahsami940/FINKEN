@@ -1,17 +1,19 @@
 import type { CaptureResult } from '@finken/domain/capture';
 import { today } from '@finken/domain/dates';
-import { currencySymbol } from '@finken/domain/format';
+import { currencySymbol, moneyToInput, parseMoney } from '@finken/domain/format';
 import { habits, isPrincipal, refundedAmount, transactionLabel, validateDraft } from '@finken/domain/money';
 import type { ID, Transaction, TransactionType } from '@finken/domain/types';
 import { type FormEvent, useMemo, useState } from 'react';
 import { useAppState } from '../../data/hooks';
 import { store } from '../../data/store';
+import { track } from '../../data/usage';
 import { Button } from '../ui/Button';
 import { cn } from '../ui/cn';
 import { Field, Input, Select, Textarea } from '../ui/Field';
 import { Segmented } from '../ui/Misc';
 import { Modal } from '../ui/Modal';
 import { useToast } from '../ui/Toast';
+import { useRequestId } from '../ui/useRequestId';
 import { CategoryIcon } from './parts';
 
 export interface FormRequest {
@@ -60,6 +62,7 @@ function withSeparators(value: string): string {
 }
 
 export function TransactionForm({ request, onClose }: TransactionFormProps) {
+  const [requestId, nextRequest] = useRequestId();
   const state = useAppState();
   const toast = useToast();
   const { refundOf, capture } = request;
@@ -70,7 +73,7 @@ export function TransactionForm({ request, onClose }: TransactionFormProps) {
 
   const [type, setType] = useState<TransactionType>(source?.type ?? request.type);
   const [spaceId, setSpaceId] = useState<ID>(source?.spaceId ?? refundOf?.spaceId ?? state.activeSpaceId ?? '');
-  const [amount, setAmount] = useState(source ? String(source.amount) : refundOf ? String(refundable) : capture?.amount ? String(capture.amount) : '');
+  const [amount, setAmount] = useState(source ? moneyToInput(source.amount) : refundOf ? moneyToInput(refundable) : capture?.amount ? moneyToInput(capture.amount) : '');
   const [date, setDate] = useState(request.edit?.date ?? capture?.date ?? today());
   const [description, setDescription] = useState(source?.description ?? capture?.description ?? (refundOf ? `Refund: ${refundOf.description || 'expense'}` : ''));
   const [notes, setNotes] = useState(source?.notes ?? '');
@@ -123,7 +126,7 @@ export function TransactionForm({ request, onClose }: TransactionFormProps) {
     const draft = {
       spaceId,
       type,
-      amount: Number(amount),
+      amount: parseMoney(amount),
       date,
       description,
       notes,
@@ -138,8 +141,10 @@ export function TransactionForm({ request, onClose }: TransactionFormProps) {
     const invalid = validateDraft(draft);
     if (invalid) return setError(invalid);
 
-    const result = request.edit ? store.updateTransaction(request.edit.id, draft) : store.addTransaction(draft);
+    const result = request.edit ? store.updateTransaction(request.edit.id, draft) : store.addTransaction(draft, requestId);
     if (!result.ok) return setError(result.error);
+    nextRequest();
+    if (!editing && (type === 'expense' || type === 'income' || type === 'transfer')) track(`add:${type}`);
 
     const elsewhere = spaceId !== state.activeSpaceId && space ? ` in ${space.name}` : '';
     toast(editing ? 'Changes saved' : `${SAVED[type]}${elsewhere}`);

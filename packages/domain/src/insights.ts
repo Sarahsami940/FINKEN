@@ -1,3 +1,8 @@
+import { MINOR_UNITS } from './format';
+
+/** A threshold written in rupees, in the minor units amounts are stored in. */
+const rs = (major: number) => major * MINOR_UNITS;
+
 /**
  * "Finken noticed" — short observations derived from real records.
  *
@@ -142,7 +147,7 @@ export function buildInsights({
     const ratio = changeRatio(c.amount, before);
     // Ignore small categories so a tiny base cannot produce a dramatic percentage.
     // A refund larger than this month's spending is not a trend, and would give an impossible percentage.
-    if (ratio === null || c.amount < 0 || before < 1000 || Math.abs(ratio) < 0.1) continue;
+    if (ratio === null || c.amount < 0 || before < rs(1000) || Math.abs(ratio) < 0.1) continue;
     if (!mover || Math.abs(c.amount - before) > Math.abs(mover.now - mover.before)) {
       mover = { name: c.name, ratio, now: c.amount, before, categoryId: c.categoryId };
     }
@@ -165,7 +170,7 @@ export function buildInsights({
   }
 
   // ── Spending trend: the whole month so far ──
-  const spendRatio = cmp.before.spent >= 1000 ? changeRatio(cmp.now.spent, cmp.before.spent) : null;
+  const spendRatio = cmp.before.spent >= rs(1000) ? changeRatio(cmp.now.spent, cmp.before.spent) : null;
   if (spendRatio !== null && Math.abs(spendRatio) >= 0.1) {
     const up = spendRatio > 0;
     insights.push({
@@ -219,7 +224,7 @@ export function buildInsights({
     if (history.length < 4) continue;
     const usual = median(history);
     const ratio = usual > 0 ? t.amount / usual : 0;
-    if (ratio >= 2.5 && t.amount - usual >= 1000 && (!unusual || ratio > unusual.ratio)) unusual = { t, usual, ratio };
+    if (ratio >= 2.5 && t.amount - usual >= rs(1000) && (!unusual || ratio > unusual.ratio)) unusual = { t, usual, ratio };
   }
   if (unusual) {
     const category = categories.find((c) => c.id === unusual.t.categoryId);

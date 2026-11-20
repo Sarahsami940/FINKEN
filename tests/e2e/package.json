@@ -1,0 +1,17 @@
+{
+  "name": "@finken/e2e",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "The web app's store against the real API and Postgres.",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "load": "node --import tsx load/load.ts"
+  },
+  "devDependencies": {
+    "@finken/api": "*",
+    "@finken/domain": "*",
+    "@finken/web": "*"
+  }
+}

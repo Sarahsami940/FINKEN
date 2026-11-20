@@ -5,6 +5,7 @@ COPY package.json package-lock.json ./
 COPY packages/domain/package.json packages/domain/
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
+COPY tests/e2e/package.json tests/e2e/
 RUN npm ci -w @finken/api
 COPY tsconfig.base.json ./
 COPY packages/domain packages/domain
@@ -18,6 +19,7 @@ COPY package.json package-lock.json ./
 COPY packages/domain/package.json packages/domain/
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
+COPY tests/e2e/package.json tests/e2e/
 RUN npm ci -w @finken/api --omit=dev && npm cache clean --force
 COPY --from=build /app/apps/api/dist apps/api/dist
 COPY apps/api/migrations apps/api/migrations
@@ -25,4 +27,5 @@ WORKDIR /app/apps/api
 USER node
 EXPOSE 4000
 # Run migrations as a separate release step: node dist/migrate.js
+# Nightly: node dist/reconcile.js (exits 1 when something is wrong). After a restore: node dist/restore.js
 CMD ["node", "dist/server.js"]

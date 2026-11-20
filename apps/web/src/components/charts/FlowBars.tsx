@@ -36,7 +36,13 @@ export function FlowBars({ buckets, unit, currency, highlight, onSelect, classNa
 
   return (
     <div className={className}>
-      <div role="img" aria-label={`Income and spending. ${summary}`} className={cn('flex h-44 items-end', many ? 'gap-0.5 sm:gap-1' : 'gap-2 sm:gap-3')}>
+      {/* A picture when it only shows; a group of buttons (each with its own figures) when the bars can be clicked. */}
+      {/* biome-ignore lint/a11y/useAriaPropsSupportedByRole: the role is chosen at run time, and both group and img take a label. */}
+      <div
+        role={onSelect ? 'group' : 'img'}
+        aria-label={onSelect ? 'Income and spending' : `Income and spending. ${summary}`}
+        className={cn('flex h-44 items-end', many ? 'gap-0.5 sm:gap-1' : 'gap-2 sm:gap-3')}
+      >
         {buckets.map((b) => {
           const current = highlight !== undefined && highlight >= b.from && highlight <= b.to;
           const title = `${bucketTitle(b, unit)}\nIncome ${formatMoney(b.income, currency)}\nSpent ${formatMoney(b.spent, currency)}`;
@@ -62,7 +68,7 @@ export function FlowBars({ buckets, unit, currency, highlight, onSelect, classNa
               key={b.from}
               type="button"
               title={title}
-              aria-label={`Show transactions for ${bucketTitle(b, unit)}`}
+              aria-label={`${bucketTitle(b, unit)}: income ${formatMoney(b.income, currency)}, spent ${formatMoney(b.spent, currency)}. Show these transactions`}
               onClick={() => onSelect(b)}
               className={cn(cls, 'hover:bg-canvas')}
             >

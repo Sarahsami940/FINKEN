@@ -5,7 +5,8 @@
   "type": "module",
   "workspaces": [
     "packages/*",
-    "apps/*"
+    "apps/*",
+    "tests/*"
   ],
   "engines": {
     "node": ">=24"
@@ -16,11 +17,14 @@
     "db:up": "docker compose up -d db",
     "db:migrate": "npm run db:migrate -w @finken/api",
     "typecheck": "npm run typecheck --workspaces",
-    "test": "npm run test --workspaces",
+    "test": "npm run test --workspaces --if-present",
     "lint": "biome check .",
     "format": "biome check --write .",
     "build": "npm run build -w @finken/web && npm run build -w @finken/api",
-    "check": "npm run lint && npm run typecheck && npm run test && npm run build"
+    "check": "npm run lint && npm run typecheck && npm run test && npm run build",
+    "dev:account": "npm run dev:account -w @finken/web",
+    "dev:api:memory": "npm run dev:memory -w @finken/api",
+    "test:browser": "npm run test:browser -w @finken/browser-tests"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.8",

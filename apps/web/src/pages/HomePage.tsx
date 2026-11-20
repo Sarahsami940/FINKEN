@@ -1,5 +1,5 @@
 import { comparisonFor, flowSeries, REPORT_PERIODS, type ReportPeriod, reportRange, transactionsLink } from '@finken/domain/dashboard';
-import { formatDay, formatDueLabel, formatFullDate, formatMonthYear, formatRelativeDay, parseISODate, today } from '@finken/domain/dates';
+import { currentHour, formatDay, formatDueLabel, formatFullDate, formatMonthYear, formatRelativeDay, parseISODate, today } from '@finken/domain/dates';
 import { formatMoney, formatPercent } from '@finken/domain/format';
 import { DEFAULT_SAFE_OPTIONS, safeToSpend } from '@finken/domain/health';
 import { buildInsights } from '@finken/domain/insights';
@@ -11,6 +11,7 @@ import { daysFrom, expectedEvents, expectedTotals } from '@finken/domain/upcomin
 import { BriefcaseBusiness, CalendarClock, CalendarDays, ChevronRight, Handshake, Inbox, PiggyBank, Plus, Sun, Target } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { UsageQuestion } from '../components/beta/Beta';
 import { DonutChart } from '../components/charts/DonutChart';
 import { FlowBars } from '../components/charts/FlowBars';
 import { useAddFlow } from '../components/money/AddFlow';
@@ -27,7 +28,7 @@ import { Badge, EmptyState, ProgressBar } from '../components/ui/Misc';
 import { useAppState, useSpaceData } from '../data/hooks';
 
 function greeting(): string {
-  const hour = new Date().getHours();
+  const hour = currentHour();
   if (hour < 12) return 'Good morning';
   if (hour < 17) return 'Good afternoon';
   return 'Good evening';
@@ -40,7 +41,7 @@ export function periodLabel(period: ReportPeriod, range: DateRange): string {
   if (range.from === range.to) return formatDay(range.from);
   const sameYear = range.from.slice(0, 4) === range.to.slice(0, 4);
   const year = parseISODate(range.to).getFullYear();
-  return `${formatDay(range.from)} – ${formatDay(range.to)}${sameYear && year === new Date().getFullYear() ? '' : ` ${year}`}`;
+  return `${formatDay(range.from)} – ${formatDay(range.to)}${sameYear && year === parseISODate(today()).getFullYear() ? '' : ` ${year}`}`;
 }
 
 const PERIOD_NOUN: Record<ReportPeriod, string> = {
@@ -145,6 +146,7 @@ export function HomePage() {
 
   return (
     <div>
+      <UsageQuestion className="mb-5" />
       <header className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-medium text-ink-3">{formatFullDate(now)}</p>
