@@ -48,7 +48,7 @@ const ALL_SPACES = 'all';
 export function TransactionsPage() {
   const state = useAppState();
   const active = useSpaceData();
-  const { openMenu, openDetail } = useAddFlow();
+  const { openMenu, openDetail, canAdd } = useAddFlow();
   // Filters live in the URL so dashboards can link straight to a filtered list.
   const [params, setParams] = useSearchParams();
 
@@ -140,11 +140,13 @@ export function TransactionsPage() {
         title="Transactions"
         subtitle={`Everything recorded in ${scope}`}
         action={
-          <div className="hidden lg:block">
-            <Button variant="primary" icon={<Plus className="size-4" />} onClick={openMenu}>
-              Add
-            </Button>
-          </div>
+          canAdd && (
+            <div className="hidden lg:block">
+              <Button variant="primary" icon={<Plus className="size-4" />} onClick={openMenu}>
+                Add
+              </Button>
+            </div>
+          )
         }
       />
 

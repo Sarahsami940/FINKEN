@@ -26,27 +26,30 @@ const categories = [
 const now = '2026-11-14';
 const parse = (text: string) => parseCapture(text, { categories, accounts, now });
 
+/** Amounts are stored in paisa; tests state them in rupees. */
+const rs = (rupees: number) => rupees * 100;
+
 describe('parseCapture', () => {
   it('reads the example from the brief', () => {
     const r = parse('Spent Rs. 850 on dinner yesterday.');
-    expect(r).toMatchObject({ type: 'expense', amount: 850, date: '2026-11-13', categoryId: 'food', subcategoryId: 'food:Dining Out', description: 'Dinner' });
+    expect(r).toMatchObject({ type: 'expense', amount: rs(850), date: '2026-11-13', categoryId: 'food', subcategoryId: 'food:Dining Out', description: 'Dinner' });
     expect(r.guesses).toEqual([]);
   });
 
   it('reads income and an account', () => {
     const r = parse('Received 185,000 salary in bank today');
-    expect(r).toMatchObject({ type: 'income', amount: 185000, date: now, categoryId: 'salary', accountId: 'bank' });
+    expect(r).toMatchObject({ type: 'income', amount: rs(185000), date: now, categoryId: 'salary', accountId: 'bank' });
   });
 
   it('understands k and lakh', () => {
-    expect(parse('paid 2.5k for fuel').amount).toBe(2500);
-    expect(parse('bought a bike for 1.2 lakh').amount).toBe(120000);
+    expect(parse('paid 2.5k for fuel').amount).toBe(rs(2500));
+    expect(parse('bought a bike for 1.2 lakh').amount).toBe(rs(120000));
   });
 
   it('does not mistake a date for the amount', () => {
-    expect(parse('fuel 3200 on 12 nov')).toMatchObject({ amount: 3200, date: '2026-11-12', subcategoryId: 'transport:Fuel' });
-    expect(parse('paid 900 for groceries 3 days ago')).toMatchObject({ amount: 900, date: '2026-11-11' });
-    expect(parse('lunch 5/11 450')).toMatchObject({ amount: 450, date: '2026-11-05' });
+    expect(parse('fuel 3200 on 12 nov')).toMatchObject({ amount: rs(3200), date: '2026-11-12', subcategoryId: 'transport:Fuel' });
+    expect(parse('paid 900 for groceries 3 days ago')).toMatchObject({ amount: rs(900), date: '2026-11-11' });
+    expect(parse('lunch 5/11 450')).toMatchObject({ amount: rs(450), date: '2026-11-05' });
   });
 
   it('resolves weekdays to the most recent one', () => {
@@ -60,7 +63,7 @@ describe('parseCapture', () => {
   });
 
   it('reads withdrawals and transfers between named accounts', () => {
-    expect(parse('withdrew 20000')).toMatchObject({ type: 'transfer', amount: 20000, accountId: 'bank', toAccountId: 'cash' });
+    expect(parse('withdrew 20000')).toMatchObject({ type: 'transfer', amount: rs(20000), accountId: 'bank', toAccountId: 'cash' });
     expect(parse('transferred 6,000 from bank to wallet')).toMatchObject({ type: 'transfer', accountId: 'bank', toAccountId: 'wallet' });
   });
 

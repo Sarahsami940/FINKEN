@@ -8,7 +8,9 @@
     "build": "vite build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "dev:account": "vite --mode account",
+    "dev:sign-in": "vite --mode sign-in"
   },
   "dependencies": {
     "@finken/domain": "*",

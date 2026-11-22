@@ -12,8 +12,65 @@ export function parseISODate(iso: ISODate): Date {
   return new Date(y, m - 1, d);
 }
 
+/*
+ * Time zone rules
+ * - Records carry calendar dates (YYYY-MM-DD) with no time zone. A payment on
+ *   15 March stays on 15 March wherever it is viewed.
+ * - "Today", and so "this week" and "this month", is the calendar date in the
+ *   user's time zone (an IANA name such as Asia/Karachi), never the server's
+ *   or the device's clock zone.
+ * - Timestamps (createdAt, updatedAt) are moments in UTC, ISO 8601.
+ */
+
+/** Finken's home market; used when nothing better is known. */
+export const DEFAULT_TIME_ZONE = 'Asia/Karachi';
+
+let userTimeZone: string | null = null;
+
+export function isValidTimeZone(zone: string): boolean {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: zone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The time zone this device is set to, or Finken's default if it cannot tell. */
+export function deviceTimeZone(): string {
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return zone && isValidTimeZone(zone) ? zone : DEFAULT_TIME_ZONE;
+}
+
+/** Sets the zone that today() uses: the signed-in user's. Null goes back to the device's. */
+export function setTimeZone(zone: string | null | undefined) {
+  userTimeZone = zone && isValidTimeZone(zone) ? zone : null;
+}
+
+export function currentTimeZone(): string {
+  return userTimeZone ?? deviceTimeZone();
+}
+
+/** The calendar date, and the hour, at moment `at` in `zone`. */
+export function zonedParts(zone: string, at: Date = new Date()): { date: ISODate; hour: number } {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' }).formatToParts(at);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
+  return { date: `${get('year')}-${get('month')}-${get('day')}`, hour: Number(get('hour')) };
+}
+
+/** The calendar date at `at` in `zone`. */
+export function todayIn(zone: string, at: Date = new Date()): ISODate {
+  return zonedParts(zone, at).date;
+}
+
+/** Today in the user's time zone. */
 export function today(): ISODate {
-  return toISODate(new Date());
+  return todayIn(currentTimeZone());
+}
+
+/** The hour (0–23) now in the user's time zone. */
+export function currentHour(): number {
+  return zonedParts(currentTimeZone()).hour;
 }
 
 export function addDays(iso: ISODate, days: number): ISODate {
@@ -116,7 +173,7 @@ export function formatRelativeDay(iso: ISODate): string {
   if (delta === -1) return 'Yesterday';
   if (delta === 1) return 'Tomorrow';
   const d = parseISODate(iso);
-  const sameYear = d.getFullYear() === new Date().getFullYear();
+  const sameYear = d.getFullYear() === parseISODate(today()).getFullYear();
   return d.toLocaleDateString(LOCALE, {
     weekday: 'short',
     day: 'numeric',

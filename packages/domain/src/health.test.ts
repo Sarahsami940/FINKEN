@@ -196,8 +196,8 @@ describe('insight feed', () => {
   it('spots one expense far above what its category usually costs', () => {
     const shopping = { id: 'shop', spaceId: 's', name: 'Shopping', kind: 'expense' as const, icon: 'bag', color: 'rose', subcategories: [], createdAt: '' };
     const list = [
-      ...['2026-07-05', '2026-08-05', '2026-09-05', '2026-10-05'].map((d) => tx('expense', 2000, d, { categoryId: 'shop' })),
-      tx('expense', 9000, '2026-11-10', { categoryId: 'shop', description: 'Winter coat' }),
+      ...['2026-07-05', '2026-08-05', '2026-09-05', '2026-10-05'].map((d) => tx('expense', 200000, d, { categoryId: 'shop' })),
+      tx('expense', 900000, '2026-11-10', { categoryId: 'shop', description: 'Winter coat' }),
     ];
     const insight = buildInsights({ transactions: list, categories: [shopping], recurring: [], currency: 'PKR', anchor: NOW }).find((i) => i.section === 'unusual');
     expect(insight?.detail).toContain('Winter coat');

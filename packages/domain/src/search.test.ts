@@ -49,7 +49,7 @@ describe('reading questions', () => {
     const { q, r } = ask('How much does Ahmed owe me?');
     expect(q.intent).toBe('owed');
     expect(q.owedDirection).toBe('to-you');
-    expect(r.kind === 'owed' && r.total).toBe(15000);
+    expect(r.kind === 'owed' && r.total).toBe(1500000);
     const mine = ask('What do I owe?');
     expect(mine.q.owedDirection).toBe('you-owe');
     expect(mine.r.kind === 'owed' && mine.r.positions.map((p) => p.obligation.title)).toEqual(['Borrowed from Bilal for the laptop']);
@@ -85,10 +85,10 @@ describe('reading questions', () => {
 
   it('reads amount limits, month names and all Spaces', () => {
     const { q } = ask('Show expenses over Rs 10,000 in October across spaces');
-    expect(q.min).toBe(10000);
+    expect(q.min).toBe(1000000);
     expect(q.range).toEqual({ from: '2026-10-01', to: '2026-10-31' });
     expect(q.spaceScope).toBe('all');
-    expect(ask('spent under 2k').q.max).toBe(2000);
+    expect(ask('spent under 2k').q.max).toBe(200000);
     // A later month with no year is last year's.
     expect(ask('income in december').q.range?.from).toBe('2025-12-01');
   });

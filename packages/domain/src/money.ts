@@ -12,6 +12,7 @@
  *  - What is still owed is always calculated from linked transactions.
  */
 import { addDays, addMonths, inRange, monthRange, nextOccurrence, parseISODate, today } from './dates';
+import { formatNumber, isMinorAmount } from './format';
 import type { Account, Category, DateRange, ID, ISODate, Obligation, ObligationKind, Person, Transaction, TransactionDraft, TransactionType } from './types';
 
 /** Which way money moves through `accountId`: in (+1), out (-1), or between accounts (0). */
@@ -491,7 +492,7 @@ export function owedSummary(obligations: Obligation[], transactions: Transaction
 
 /** Checks the fields of a draft on their own. Returns a message, or null when valid. */
 export function validateDraft(draft: { type: TransactionType; amount: number; accountId?: ID; toAccountId?: ID; date?: ISODate; obligationId?: ID }): string | null {
-  if (!Number.isFinite(draft.amount) || draft.amount <= 0) return 'Enter an amount greater than zero.';
+  if (!isMinorAmount(draft.amount) || draft.amount <= 0) return 'Enter an amount greater than zero.';
   if (!draft.accountId) return 'Choose an account.';
   if (!draft.date || !/^\d{4}-\d{2}-\d{2}$/.test(draft.date)) return 'Choose a date.';
   if (draft.type === 'transfer') {
@@ -510,7 +511,7 @@ export interface IntegrityContext {
   obligations: Obligation[];
 }
 
-const amountText = (n: number) => n.toLocaleString('en-US', { maximumFractionDigits: 2 });
+const amountText = (n: number) => formatNumber(n);
 
 /**
  * Checks a draft against the other records in its Space, so a save can never

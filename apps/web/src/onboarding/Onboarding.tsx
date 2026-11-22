@@ -2,14 +2,18 @@ import { SPACE_TYPE_META } from '@finken/domain/defaults';
 import { CURRENCIES, DEFAULT_CURRENCY } from '@finken/domain/format';
 import type { SpaceType } from '@finken/domain/types';
 import { ArrowLeft, ArrowRight, Check } from 'lucide-react';
-import { type FormEvent, type ReactNode, useState } from 'react';
+import { type FormEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import { Button } from '../components/ui/Button';
 import { cn } from '../components/ui/cn';
 import { Field, Input, Select } from '../components/ui/Field';
 import { iconFor } from '../components/ui/icons';
+import { type Account, account } from '../data/account';
 import { useAppState } from '../data/hooks';
+import { leaveFinken } from '../data/session';
 import { store } from '../data/store';
+import { AccountLoginForm, AccountRegisterForm, ForgotPasswordForm, ResetPasswordForm, useEmailConfirmation } from './AccountForms';
 import { LoginForm, PrototypeNotice, RegisterForm } from './AuthForms';
+import { MoveData } from './MoveData';
 
 function Wordmark({ className }: { className?: string }) {
   return (
@@ -22,7 +26,7 @@ function Wordmark({ className }: { className?: string }) {
 /** The five questions Finken exists to answer (from the product vision). */
 const QUESTIONS = ['Where is my money?', 'Where is it going?', "What's coming up?", 'What can I afford?', 'What should I do next?'];
 
-function Welcome({ onStart, onTry, onLogin }: { onStart: () => void; onTry: () => void; onLogin: () => void }) {
+function Welcome({ onStart, onTry, onLogin }: { onStart: () => void; onTry?: () => void; onLogin: () => void }) {
   return (
     <div className="grid min-h-dvh lg:grid-cols-2">
       <div className="flex flex-col px-6 py-6 sm:px-10 lg:px-16 lg:py-10">
@@ -36,11 +40,13 @@ function Welcome({ onStart, onTry, onLogin }: { onStart: () => void; onTry: () =
             <Button variant="primary" size="lg" block onClick={onStart}>
               Get Started
             </Button>
-            <Button size="lg" block onClick={onTry}>
-              Try Finken
-            </Button>
+            {onTry && (
+              <Button size="lg" block onClick={onTry}>
+                Try Finken
+              </Button>
+            )}
           </div>
-          <p className="mt-4 max-w-md text-sm text-ink-3">Try Finken opens a demo with sample data. No account needed — everything stays in this browser.</p>
+          {onTry && <p className="mt-4 max-w-md text-sm text-ink-3">Try Finken opens a demo with sample data. No account needed — everything stays in this browser.</p>}
           <p className="mt-6 text-sm text-ink-2">
             Already have an account?{' '}
             <button type="button" onClick={onLogin} className="font-bold text-accent hover:text-accent-strong">
@@ -199,7 +205,7 @@ export function FirstSpaceStep() {
   }
 
   return (
-    <Frame onBack={() => store.signOut()} backLabel="Log out">
+    <Frame onBack={() => void leaveFinken()} backLabel="Log out">
       <Heading
         title={user?.name ? `Welcome, ${user.name.split(' ')[0]}` : 'Welcome'}
         subtitle="What would you like to manage first? This becomes your first Space — you can add more later."
@@ -240,12 +246,217 @@ export function FirstSpaceStep() {
   );
 }
 
-type Step = 'welcome' | 'register' | 'login' | 'guest';
+type Step = 'welcome' | 'register' | 'login' | 'guest' | 'forgot';
+
+/** With a sign-in provider: Finken's own page only explains, and the provider's page does the rest. */
+function ProviderSignIn({ account, signUp, onBack }: { account: Account; signUp: boolean; onBack: () => void }) {
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function go() {
+    setBusy(true);
+    setError(null);
+    const failed = await account.startSignIn({ signUp });
+    // On success the browser is already on its way to the provider.
+    if (failed) {
+      setError(failed.error);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Frame onBack={onBack}>
+      <Heading
+        title={signUp ? 'Create your Finken account' : 'Sign in to Finken'}
+        subtitle="You sign in on our secure sign-in page, then come straight back. Your records are kept in your account, so they are on every device you use, and still work offline."
+      />
+      {error && (
+        <p role="alert" className="mb-4 rounded-control bg-negative-soft px-3.5 py-2.5 text-sm font-semibold text-negative">
+          {error}
+        </p>
+      )}
+      <Button variant="primary" size="lg" block disabled={busy} onClick={() => void go()}>
+        {busy ? 'Opening the sign-in page…' : signUp ? 'Continue to create your account' : 'Continue to sign in'}
+      </Button>
+      <p className="mt-5 text-center text-sm text-ink-3">Finken never sees your password.</p>
+    </Frame>
+  );
+}
+
+/** Back from the provider's page at /auth/callback: finishes signing in, then opens Finken. */
+export function SignInCallback({ account }: { account: Account }) {
+  const [error, setError] = useState<string | null>(null);
+  const started = useRef(false);
+
+  useEffect(() => {
+    // Once only: the code in the address works a single time.
+    if (started.current) return;
+    started.current = true;
+    void (async () => {
+      const done = await account.finishSignIn(window.location.href);
+      window.history.replaceState(null, '', '/');
+      const result = done.ok ? await store.signInWithProvider() : done;
+      if (!result.ok) return setError(result.error);
+      account.start();
+    })();
+  }, [account]);
+
+  return (
+    <Frame>
+      {error ? (
+        <>
+          <Heading title="Signing in did not finish" subtitle={error} />
+          <Button variant="primary" size="lg" block onClick={() => void account.startSignIn()}>
+            Try again
+          </Button>
+        </>
+      ) : (
+        <p role="status" className="text-center text-[15px] font-semibold text-ink-2">
+          Signing you in…
+        </p>
+      )}
+    </Frame>
+  );
+}
+
+/** Opened from the "set a new password" email. */
+export function ResetPasswordStep({ account }: { account: Account }) {
+  return (
+    <Frame onBack={() => window.location.assign('/')} backLabel="Cancel">
+      <Heading title="Choose a new password" subtitle="Setting it signs you out of every other device, in case someone else had your old one." />
+      {/* Signed in now: open Finken fresh, as this account. */}
+      <ResetPasswordForm account={account} onDone={() => window.location.replace('/')} />
+    </Frame>
+  );
+}
+
+/** Opened from the "confirm your email" link. */
+export function ConfirmEmailStep({ account }: { account: Account }) {
+  const { done, error } = useEmailConfirmation(account);
+  return (
+    <Frame>
+      <Heading
+        title={!done ? 'Confirming your email…' : error ? 'That link did not work' : 'Your email is confirmed'}
+        subtitle={!done ? 'One moment.' : (error ?? 'Thank you. You can carry on using Finken.')}
+      />
+      {done && (
+        <Button variant="primary" size="lg" block onClick={() => window.location.assign('/')}>
+          Open Finken
+        </Button>
+      )}
+    </Frame>
+  );
+}
+
+/** Signed in while the beta is invite-only: the invite code comes first. */
+export function InviteStep({ account }: { account: Account }) {
+  const { user } = useAppState();
+  const [code, setCode] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    const joined = await account.joinBeta(code);
+    setBusy(false);
+    if (!joined.ok) setError(joined.error);
+  }
+
+  return (
+    <Frame onBack={() => void leaveFinken()} backLabel="Sign out">
+      <Heading
+        title="Enter your invite code"
+        subtitle={`Finken is in a closed beta. You are signed in${user?.email ? ` as ${user.email}` : ''}; enter the code from your invitation to start.`}
+      />
+      <form onSubmit={submit} noValidate className="space-y-4">
+        <Field label="Invite code" hint="It looks like FNK-7KQM-2XHD. Capitals and dashes do not matter.">
+          {(id) => (
+            <Input
+              id={id}
+              autoComplete="off"
+              autoCapitalize="characters"
+              spellCheck={false}
+              maxLength={40}
+              value={code}
+              onChange={(e) => {
+                setCode(e.target.value);
+                if (error) setError(null);
+              }}
+            />
+          )}
+        </Field>
+        {error && (
+          <p role="alert" className="rounded-control bg-negative-soft px-3.5 py-2.5 text-sm font-semibold text-negative">
+            {error}
+          </p>
+        )}
+        <Button type="submit" variant="primary" size="lg" block disabled={busy || !code.trim()}>
+          {busy ? 'Checking…' : 'Join the beta'}
+        </Button>
+      </form>
+      <p className="mt-6 rounded-control bg-sunken px-3.5 py-3 text-[13px] leading-relaxed text-ink-2">
+        No code yet? Places open in small groups so every problem can be fixed quickly. Your account is kept, and you can download or delete it from here at any time by signing in.
+      </p>
+    </Frame>
+  );
+}
+
+/** Straight after signing in: offer to bring in what this browser saved before accounts. */
+export function MoveDataStep({ account, onDone }: { account: Account; onDone: (choice: 'moved' | 'later') => void }) {
+  const { user } = useAppState();
+  return (
+    <Frame>
+      <Heading
+        title="Bring your data into your account"
+        subtitle="Finken found Spaces saved in this browser before you signed in. Choose which to move into your account, so they are on all your devices."
+      />
+      <MoveData account={account} email={user?.email} onDone={onDone} />
+    </Frame>
+  );
+}
 
 /** Everything a visitor sees before they are inside Finken. */
 export function Onboarding() {
   const [step, setStep] = useState<Step>('welcome');
   const [busy, setBusy] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+
+  if (account) {
+    if (step === 'welcome') return <Welcome onStart={() => setStep('register')} onLogin={() => setStep('login')} />;
+    if (account.provider) return <ProviderSignIn account={account} signUp={step === 'register'} onBack={() => setStep('welcome')} />;
+    // Finken's own sign-in.
+    if (step === 'register') {
+      return (
+        <Frame onBack={() => setStep('welcome')}>
+          <Heading title="Create your Finken account" subtitle="Your records are kept in your account, so they are on every device you sign in on, and still work offline." />
+          <AccountRegisterForm account={account} onLogin={() => setStep('login')} />
+        </Frame>
+      );
+    }
+    if (step === 'forgot') {
+      return (
+        <Frame onBack={() => setStep('login')}>
+          <Heading title="Set a new password" subtitle="Enter your account’s email, and we will send you a link to choose a new password." />
+          <ForgotPasswordForm account={account} initialEmail={forgotEmail} onBack={() => setStep('login')} />
+        </Frame>
+      );
+    }
+    return (
+      <Frame onBack={() => setStep('welcome')}>
+        <Heading title="Welcome back" subtitle="Log in to your Finken account." />
+        <AccountLoginForm
+          account={account}
+          onRegister={() => setStep('register')}
+          onForgot={(email) => {
+            setForgotEmail(email);
+            setStep('forgot');
+          }}
+        />
+      </Frame>
+    );
+  }
 
   if (step === 'welcome') {
     return <Welcome onStart={() => setStep('register')} onTry={() => setStep('guest')} onLogin={() => setStep('login')} />;

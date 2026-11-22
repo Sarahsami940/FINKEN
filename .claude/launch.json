@@ -6,6 +6,36 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 5173
+    },
+    {
+      "name": "api-memory",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:memory", "-w", "@finken/api"],
+      "port": 4000
+    },
+    {
+      "name": "finken-account",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:account"],
+      "port": 5173
+    },
+    {
+      "name": "api-local",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:api:local"],
+      "port": 4000
+    },
+    {
+      "name": "api-sign-in",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:api:sign-in"],
+      "port": 4000
+    },
+    {
+      "name": "finken-sign-in",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:sign-in"],
+      "port": 5173
     }
   ]
 }

@@ -1,5 +1,5 @@
 import { formatDay, formatDueLabel } from '@finken/domain/dates';
-import { currencySymbol, formatMoney } from '@finken/domain/format';
+import { currencySymbol, formatMoney, moneyToInput, parseMoney } from '@finken/domain/format';
 import { owedSummary, owedToYouKind } from '@finken/domain/money';
 import type { Account, AccountKind, ID, ObligationKind } from '@finken/domain/types';
 import { Archive, ArchiveRestore, Trash2 } from 'lucide-react';
@@ -42,14 +42,14 @@ export function AccountEditor({ spaceId, currency, account, onClose }: AccountEd
   const toast = useToast();
   const [name, setName] = useState(account?.name ?? '');
   const [kind, setKind] = useState<AccountKind>(account?.kind ?? 'bank');
-  const [balance, setBalance] = useState(account ? String(account.openingBalance) : '');
+  const [balance, setBalance] = useState(account ? moneyToInput(account.openingBalance) : '');
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const inUse = account ? store.accountInUse(account.id) : false;
 
   function submit(e: FormEvent) {
     e.preventDefault();
-    const draft = { name, kind, openingBalance: balance === '' || balance === '-' ? 0 : Number(balance) };
+    const draft = { name, kind, openingBalance: balance === '' || balance === '-' ? 0 : parseMoney(balance) };
     const result = account ? store.updateAccount(account.id, draft) : store.addAccount(spaceId, draft);
     if (!result.ok) return setError(result.error);
     toast(account ? 'Account updated' : `${name.trim()} added`);

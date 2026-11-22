@@ -101,7 +101,7 @@ describe('budgets', () => {
     const s = budgetStatus(budget(), list, '2026-03-10');
     expect(s.projected).toBe(18000 + 14000);
     expect(s.alert).toBe('likely');
-    expect(budgetMessage(s, 'PKR')).toBe("You're likely to exceed your Food budget by Rs. 2,000 this month.");
+    expect(budgetMessage(s, 'PKR')).toBe("You're likely to exceed your Food budget by Rs. 20 this month.");
   });
 });
 

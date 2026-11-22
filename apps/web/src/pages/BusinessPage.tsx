@@ -21,7 +21,8 @@ import { formatMoney, formatPercent } from '@finken/domain/format';
 import { changeRatio } from '@finken/domain/money';
 import { buildReport, REPORTS, type ReportKey, reportToCsv } from '@finken/domain/reports';
 import type { Category, CostType, DateRange, Obligation, Person, PersonRole } from '@finken/domain/types';
-import { AlertCircle, Download, FileText, Info, Pencil, Plus, Users } from 'lucide-react';
+import { reportToXlsx } from '@finken/domain/xlsx';
+import { AlertCircle, Download, FileText, Info, Pencil, Plus, Printer, Users } from 'lucide-react';
 import { type ReactNode, useMemo, useState } from 'react';
 import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { ExpectedRow, TextLink } from '../components/money/DashboardParts';
@@ -833,20 +834,22 @@ function Reports({ dates, now }: { dates: DateRange; now: string }) {
   );
   const money = (n: number) => formatMoney(n, currency);
 
-  function download() {
-    const csv = reportToCsv(report, { space: space?.name ?? '', range: dates, currency });
-    // A byte-order mark lets spreadsheet apps read the text correctly.
-    const blob = new Blob(['﻿', csv], { type: 'text/csv;charset=utf-8' });
+  function save(blob: Blob, extension: string) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `finken-${key}-${dates.from}-to-${dates.to}.csv`;
+    a.download = `finken-${key}-${dates.from}-to-${dates.to}.${extension}`;
     document.body.appendChild(a);
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     toast(`${report.title} downloaded`);
   }
+
+  const meta = { space: space?.name ?? '', range: dates, currency };
+  // A byte-order mark lets spreadsheet apps read the text correctly.
+  const downloadCsv = () => save(new Blob(['\uFEFF', reportToCsv(report, meta)], { type: 'text/csv;charset=utf-8' }), 'csv');
+  const downloadExcel = () => save(new Blob([reportToXlsx(report, meta) as BlobPart], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), 'xlsx');
 
   return (
     <div>
@@ -867,16 +870,28 @@ function Reports({ dates, now }: { dates: DateRange; now: string }) {
           </button>
         ))}
       </div>
-      <Card>
+      <Card data-print-report>
         <CardHeader
           title={report.title}
           subtitle={report.description}
           action={
-            <Button size="sm" variant="primary" icon={<Download className="size-4" />} onClick={download}>
-              CSV
-            </Button>
+            <div className="flex flex-wrap gap-2 print:hidden">
+              <Button size="sm" variant="primary" icon={<Download className="size-4" />} onClick={downloadExcel}>
+                Excel
+              </Button>
+              <Button size="sm" icon={<Download className="size-4" />} onClick={downloadCsv}>
+                CSV
+              </Button>
+              <Button size="sm" icon={<Printer className="size-4" />} onClick={() => window.print()}>
+                Print or PDF
+              </Button>
+            </div>
           }
         />
+        {/* On paper (or a PDF), the report says whose it is and for when. */}
+        <p className="mb-4 hidden text-sm text-ink-2 print:block">
+          {space?.name} · {formatDay(dates.from)} to {formatDay(dates.to)} · {currency}
+        </p>
         <div className="space-y-6">
           {report.sections.map((section) => (
             <section key={section.title}>
@@ -884,12 +899,14 @@ function Reports({ dates, now }: { dates: DateRange; now: string }) {
               {section.rows.length === 0 ? (
                 <p className="text-sm text-ink-3">Nothing to show for this period.</p>
               ) : (
-                <div className="overflow-x-auto">
+                // Wide tables scroll sideways; keyboard users can focus the table to scroll it.
+                // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region must be reachable by keyboard
+                <div className="overflow-x-auto focus-visible:outline-2 focus-visible:outline-accent" tabIndex={0} role="region" aria-label={`${report.title}: ${section.title}`}>
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-line text-xs text-ink-3">
                         {section.columns.map((c, i) => (
-                          <th key={c} className={cn('whitespace-nowrap py-2 pr-4 font-semibold last:pr-0', section.money.includes(i) || i > 0 ? 'text-right' : 'text-left')}>
+                          <th key={c} className={cn('whitespace-nowrap py-2 pr-4 font-semibold last:pr-0', i > 0 && !section.left?.includes(i) ? 'text-right' : 'text-left')}>
                             {c}
                           </th>
                         ))}
@@ -907,7 +924,7 @@ function Reports({ dates, now }: { dates: DateRange; now: string }) {
                                 key={i}
                                 className={cn(
                                   'whitespace-nowrap py-2 pr-4 last:pr-0',
-                                  i === 0 ? 'text-left font-semibold text-ink' : 'text-right text-ink-2',
+                                  i === 0 ? 'text-left font-semibold text-ink' : section.left?.includes(i) ? 'text-left text-ink-2' : 'text-right text-ink-2',
                                   isTotal && 'text-ink',
                                 )}
                               >

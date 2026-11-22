@@ -3,6 +3,7 @@
  * from records at the moment it is shown; nothing here is stored.
  */
 import { addDays, customRange, diffDays, monthRange, today, weekRange } from './dates';
+import { floorToMajor } from './format';
 import { summarize } from './money';
 import { type BudgetStatus, budgetStatus } from './planning';
 import type { Budget, DateRange, ISODate, Transaction } from './types';
@@ -159,7 +160,7 @@ export function overallBudget(budgets: Budget[], transactions: Transaction[], an
   const status = running[0];
   if (!status) return null;
   const days = status.daysLeft + 1;
-  return { status, perDay: status.remaining > 0 ? Math.floor(status.remaining / days) : null };
+  return { status, perDay: status.remaining > 0 ? floorToMajor(status.remaining / days) : null };
 }
 
 /** Builds the Transactions link that shows exactly the records behind a figure. */

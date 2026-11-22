@@ -1,10 +1,13 @@
-import { BriefcaseBusiness, ChevronDown, Info, Plus, Search, X } from 'lucide-react';
+import { BriefcaseBusiness, ChevronDown, Eye, Info, Plus, RefreshCw, Search, X } from 'lucide-react';
 import { Suspense, useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { FeedbackButton } from '../components/beta/Beta';
 import { useAddFlow } from '../components/money/AddFlow';
 import { cn } from '../components/ui/cn';
 import { useAppState } from '../data/hooks';
+import { applyUpdate, usePwa } from '../data/pwa';
 import { store } from '../data/store';
+import { useScreenUsage } from '../data/usage';
 import { CreateAccountDialog } from '../pages/SettingsPage';
 import { MONEY_SECTIONS, PRIMARY_NAV } from './nav';
 import { SpaceSwitcher } from './SpaceSwitcher';
@@ -25,7 +28,8 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
 
 function Sidebar() {
   const { openMenu } = useAddFlow();
-  const { user, spaces, activeSpaceId } = useAppState();
+  const { user, spaces, activeSpaceId, roles } = useAppState();
+  const viewOnly = roles[activeSpaceId ?? ''] === 'viewer';
   const isBusiness = spaces.find((sp) => sp.id === activeSpaceId)?.type === 'business';
   const { pathname } = useLocation();
   const inMoney = pathname.startsWith('/money');
@@ -43,14 +47,16 @@ function Sidebar() {
         <SpaceSwitcher variant="sidebar" />
       </div>
 
-      <button
-        type="button"
-        onClick={openMenu}
-        className="mt-4 flex h-11 items-center justify-center gap-2 rounded-control bg-ink text-sm font-bold text-white transition-[background-color,transform] hover:bg-ink/88 active:scale-[0.98]"
-      >
-        <Plus aria-hidden className="size-[18px]" strokeWidth={2.5} />
-        Add
-      </button>
+      {!viewOnly && (
+        <button
+          type="button"
+          onClick={openMenu}
+          className="mt-4 flex h-11 items-center justify-center gap-2 rounded-control bg-ink text-sm font-bold text-white transition-[background-color,transform] hover:bg-ink/88 active:scale-[0.98]"
+        >
+          <Plus aria-hidden className="size-[18px]" strokeWidth={2.5} />
+          Add
+        </button>
+      )}
 
       <NavLink
         to="/search"
@@ -125,13 +131,15 @@ function Sidebar() {
         )}
       </nav>
 
+      <FeedbackButton variant="ghost" className="mt-2 justify-start" />
+
       {user && (
-        <Link to="/more/settings" className="mt-4 flex items-center gap-3 rounded-2xl p-2 transition-colors hover:bg-sunken">
+        <Link to="/more/settings" className="mt-2 flex items-center gap-3 rounded-2xl p-2 transition-colors hover:bg-sunken">
           <span aria-hidden className="flex size-9 items-center justify-center rounded-full bg-accent-soft text-sm font-bold text-accent-strong">
-            {user.name.trim().charAt(0).toUpperCase() || 'G'}
+            {(user.name.trim() || (user.isGuest ? 'Guest' : (user.email ?? 'Y'))).charAt(0).toUpperCase()}
           </span>
           <span className="min-w-0">
-            <span className="block truncate text-sm font-bold text-ink">{user.name || 'Guest'}</span>
+            <span className="block truncate text-sm font-bold text-ink">{user.name || (user.isGuest ? 'Guest' : 'Your account')}</span>
             <span className="block truncate text-xs text-ink-3">{user.isGuest ? 'Saved only in this browser' : user.email}</span>
           </span>
         </Link>
@@ -181,16 +189,20 @@ function PageLoading() {
 
 function BottomNav() {
   const { openMenu } = useAddFlow();
+  const { activeSpaceId, roles } = useAppState();
+  const viewOnly = roles[activeSpaceId ?? ''] === 'viewer';
   return (
     <>
-      <button
-        type="button"
-        aria-label="Add"
-        onClick={openMenu}
-        className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] right-4 z-30 flex size-14 items-center justify-center rounded-full bg-ink text-white shadow-raised transition-transform active:scale-95 lg:hidden"
-      >
-        <Plus aria-hidden className="size-6" strokeWidth={2.5} />
-      </button>
+      {!viewOnly && (
+        <button
+          type="button"
+          aria-label="Add"
+          onClick={openMenu}
+          className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] right-4 z-30 flex size-14 items-center justify-center rounded-full bg-ink text-white shadow-raised transition-transform active:scale-95 lg:hidden"
+        >
+          <Plus aria-hidden className="size-6" strokeWidth={2.5} />
+        </button>
+      )}
       <nav aria-label="Main" className="safe-bottom fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 backdrop-blur-md lg:hidden">
         <ul className="mx-auto flex h-16 max-w-lg items-stretch">
           {PRIMARY_NAV.map((item) => (
@@ -225,6 +237,39 @@ function StorageNotice() {
           <X className="size-4" />
         </button>
       )}
+    </div>
+  );
+}
+
+/** A new version of Finken has downloaded: it starts when the person says so. */
+function UpdateNotice() {
+  const { updateReady } = usePwa();
+  if (!updateReady) return null;
+  return (
+    <div role="status" className="mb-5 flex items-center gap-3 rounded-card border border-accent/30 bg-accent-soft/50 px-4 py-3.5">
+      <RefreshCw aria-hidden className="size-[18px] shrink-0 text-accent" />
+      <p className="min-w-0 flex-1 text-sm text-ink-2">
+        <strong className="font-bold text-ink">A new version of Finken is ready.</strong> Everything you have saved stays as it is.
+      </p>
+      <button type="button" onClick={applyUpdate} className="shrink-0 rounded-control bg-ink px-3.5 py-2 text-sm font-bold text-white hover:bg-ink/88">
+        Reload
+      </button>
+    </div>
+  );
+}
+
+/** In a Space shared with them to view only, says so wherever they are. */
+function ViewOnlyNotice() {
+  const { spaces, activeSpaceId, roles } = useAppState();
+  if (roles[activeSpaceId ?? ''] !== 'viewer') return null;
+  const space = spaces.find((s) => s.id === activeSpaceId);
+  return (
+    <div role="status" className="mb-5 flex items-start gap-3 rounded-card border border-warning/30 bg-warning-soft px-4 py-3.5">
+      <Eye aria-hidden className="mt-0.5 size-[18px] shrink-0 text-warning" />
+      <p className="min-w-0 flex-1 text-sm leading-relaxed text-ink-2">
+        <strong className="font-bold text-ink">You can view {space?.name ?? 'this Space'}.</strong> Its records and reports are all here, but changes are made by its owner and the
+        people they let edit.
+      </p>
     </div>
   );
 }
@@ -264,6 +309,7 @@ function GuestNotice() {
 export function AppShell() {
   const { pathname } = useLocation();
   useSearchShortcut();
+  useScreenUsage();
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll to the top on every route change
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -275,6 +321,8 @@ export function AppShell() {
       <MobileHeader />
       <main className="px-4 pb-32 pt-6 sm:px-6 lg:ml-64 lg:px-10 lg:pb-16 lg:pt-10">
         <div className="mx-auto max-w-6xl">
+          <UpdateNotice />
+          <ViewOnlyNotice />
           <StorageNotice />
           <GuestNotice />
           <Suspense fallback={<PageLoading />}>

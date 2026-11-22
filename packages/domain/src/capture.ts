@@ -7,6 +7,7 @@
  * is listed in `guesses` so the form can say so.
  */
 import { addDays, parseISODate, today, toISODate } from './dates';
+import { formatNumber, toMinor } from './format';
 import type { Account, Category, ID, ISODate } from './types';
 
 export type CaptureType = 'expense' | 'income' | 'transfer';
@@ -139,7 +140,7 @@ function findAmount(text: string): Found<number> | null {
   for (const m of text.matchAll(pattern)) {
     const value = Number(m[2].replace(/,/g, '')) * (m[3] ? MULTIPLIERS[m[3]] : 1);
     if (!Number.isFinite(value) || value <= 0) continue;
-    const found = { value: Math.round(value * 100) / 100, matched: m[0].trim() };
+    const found = { value: toMinor(value), matched: m[0].trim() };
     // A number with a currency in front of it is certainly the amount.
     if (m[1]) return found;
     best ??= found;
@@ -163,6 +164,11 @@ function findAccount(text: string, accounts: Account[], exclude?: ID): Account |
     }
   }
   return undefined;
+}
+
+/** The category a piece of text most likely means, from the Space's own names first, then everyday words. */
+export function guessCategory(text: string, categories: Category[]): { category: Category; subId?: ID } | undefined {
+  return findCategory(text.toLowerCase(), categories);
 }
 
 function findCategory(text: string, categories: Category[]): { category: Category; subId?: ID } | undefined {
@@ -223,7 +229,7 @@ export function parseCapture(input: string, ctx: CaptureContext): CaptureResult 
     guesses.push('Assumed this is an expense');
   }
 
-  if (amount) understood.push(`Amount ${amount.value.toLocaleString('en-US')}`);
+  if (amount) understood.push(`Amount ${formatNumber(amount.value)}`);
   else guesses.push('No amount found');
   if (!date) guesses.push('No date found, so today is used');
 
