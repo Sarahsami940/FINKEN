@@ -29,7 +29,7 @@ export default defineConfig({
     {
       command: 'npm run dev:memory -w @finken/api',
       cwd: '../..',
-      env: { PORT: String(API), BETA_ACCESS: 'invite', DEV_INVITE_CODE: 'FNK-TEST-2026' },
+      env: { PORT: String(API), BETA_ACCESS: 'invite', DEV_INVITE_CODE: 'FNK-TEST-2026', APP_URL: ACCOUNT_URL },
       url: `http://127.0.0.1:${API}/health`,
       reuseExistingServer: false,
       timeout: 120_000,
@@ -48,6 +48,23 @@ export default defineConfig({
       cwd: '../..',
       env: { FINKEN_API_PROXY: `http://127.0.0.1:${API}` },
       url: ACCOUNT_URL,
+      reuseExistingServer: false,
+      timeout: 120_000,
+    },
+    // The real sign-in path: an API checking provider tokens, the stand-in provider, and the app sending people to it.
+    {
+      command: 'npm run dev:memory:sign-in -w @finken/api',
+      cwd: '../..',
+      env: { PORT: '4101', SIGN_IN_PORT: '4401', WEB_ORIGINS: 'http://localhost:5194', TOKEN_SECONDS: '65' },
+      url: 'http://127.0.0.1:4101/health',
+      reuseExistingServer: false,
+      timeout: 120_000,
+    },
+    {
+      command: 'npm run dev:sign-in -w @finken/web -- --port 5194 --strictPort',
+      cwd: '../..',
+      env: { FINKEN_API_PROXY: 'http://127.0.0.1:4101', VITE_AUTH_ISSUER: 'http://127.0.0.1:4401' },
+      url: 'http://localhost:5194',
       reuseExistingServer: false,
       timeout: 120_000,
     },

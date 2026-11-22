@@ -23,7 +23,10 @@
     "build": "npm run build -w @finken/web && npm run build -w @finken/api",
     "check": "npm run lint && npm run typecheck && npm run test && npm run build",
     "dev:account": "npm run dev:account -w @finken/web",
+    "dev:api:local": "npm run dev:local -w @finken/api",
     "dev:api:memory": "npm run dev:memory -w @finken/api",
+    "dev:api:sign-in": "npm run dev:memory:sign-in -w @finken/api",
+    "dev:sign-in": "npm run dev:sign-in -w @finken/web",
     "test:browser": "npm run test:browser -w @finken/browser-tests"
   },
   "devDependencies": {

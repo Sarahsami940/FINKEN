@@ -8,18 +8,23 @@ import { type BetaAccess, betaAccess, countError, joinBeta, markSeen, recordUsag
 import { isCollection } from './collections';
 import type { Config } from './config';
 import type { Db } from './db';
+import { logMailer, type Mailer, smtpMailer } from './mail';
 import { Metrics } from './metrics';
 import { allowedEndpoint, PUSH_HOSTS, removeSubscription, Subscription, saveSubscription } from './push';
 import { applyBatch, BatchError, changesSince, constraintMessage, getRecords, listRecords } from './records';
 import { type Limit, overLimit, RateLimiter, replySerializer, requestSerializer, routeOf, securityHeaders } from './security';
 import { cancelInvite, changeRole, createInvite, joinSpace, listInvites, listMembers, membershipList, removeMember, SharingError } from './sharing';
+import { SignInError, SignInService } from './signIn';
 
 export interface AppDeps {
   db: Db;
   config: Pick<Config, 'NODE_ENV' | 'LOG_LEVEL' | 'AUTH_MODE'> &
+    Partial<Pick<Config, 'AUTH_SECRET' | 'APP_URL' | 'SMTP_URL' | 'MAIL_FROM'>> &
     Partial<Pick<Config, 'AUTH_ISSUER' | 'AUTH_AUDIENCE' | 'AUTH_JWKS_URL' | 'AUTH_DEV_SECRET' | 'RATE_LIMIT_PER_MINUTE' | 'METRICS_TOKEN' | 'VAPID_PUBLIC_KEY'>> & {
       BETA_ACCESS?: BetaAccess;
     };
+  /** Where sign-in emails go (tests read them). Built from SMTP_URL when not given. */
+  mailer?: Mailer;
   /** Push services devices may register (tests add a local one). */
   pushHosts?: RegExp[];
   /** Replaces the token check built from config (tests). */
@@ -33,13 +38,31 @@ export interface AppDeps {
 declare module 'fastify' {
   interface FastifyRequest {
     user: AuthUser;
+    /** Finken's own sign-in: this device's session. */
+    sessionId?: string;
   }
   interface FastifyInstance {
     metrics: Metrics;
   }
 }
 
-type LimitName = 'address' | 'signInFailures' | 'devToken' | 'person' | 'batch' | 'export' | 'clientErrors' | 'invite' | 'feedback' | 'usage' | 'spaceJoin';
+type LimitName =
+  | 'address'
+  | 'signInFailures'
+  | 'devToken'
+  | 'person'
+  | 'batch'
+  | 'export'
+  | 'clientErrors'
+  | 'invite'
+  | 'feedback'
+  | 'usage'
+  | 'spaceJoin'
+  | 'login'
+  | 'register'
+  | 'forgot'
+  | 'refresh'
+  | 'emailLink';
 
 const MINUTE = 60_000;
 const ClientError = z.object({ message: z.string().trim().min(1).max(500), where: z.string().max(200).optional(), release: z.string().max(40).optional() });
@@ -74,10 +97,38 @@ const WITHOUT_INVITE = new Set([
   'POST /v1/feedback',
   'POST /v1/client-errors',
   'DELETE /v1/push/subscriptions',
+  'POST /v1/auth/password',
+  'POST /v1/auth/logout-others',
+  'POST /v1/auth/verify/resend',
 ]);
+const Register = z.object({
+  email: z.string().max(254),
+  password: z.string().max(1000),
+  name: z.string().max(80).optional(),
+  timeZone: z.string().refine(isValidTimeZone, 'Unknown time zone.').optional(),
+});
+const Login = z.object({ email: z.string().max(254), password: z.string().max(1000) });
+const Forgot = z.object({ email: z.string().max(254) });
+const Reset = z.object({ token: z.string().min(10).max(200), password: z.string().max(1000) });
+const Confirm = z.object({ token: z.string().min(10).max(200) });
+const ChangePassword = z.object({ current: z.string().max(1000), password: z.string().max(1000) });
+
+/** The cookie that keeps a device signed in. Page scripts cannot read it, and it is only sent to Finken itself. */
+const SESSION_COOKIE = 'finken_session';
+/** Refreshing and logging out need this header too, which another site cannot add: no cross-site request forgery. */
+const SESSION_HEADER = 'x-finken-session';
+
+function cookieValue(header: string | undefined, name: string): string | null {
+  for (const part of (header ?? '').split(';')) {
+    const [k, ...v] = part.trim().split('=');
+    if (k === name) return decodeURIComponent(v.join('='));
+  }
+  return null;
+}
+
 const DevIdentity = z.object({ subject: z.string().min(1).max(200), email: z.email().optional(), name: z.string().max(80).optional() });
 
-export function buildApp({ db, config, verify, limits = {}, logStream, pushHosts = PUSH_HOSTS }: AppDeps) {
+export function buildApp({ db, config, verify, limits = {}, logStream, pushHosts = PUSH_HOSTS, mailer }: AppDeps) {
   const logger: FastifyServerOptions['logger'] =
     config.NODE_ENV === 'test' && !logStream
       ? false
@@ -99,7 +150,31 @@ export function buildApp({ db, config, verify, limits = {}, logStream, pushHosts
     // Fastify's own request lines are off: the onResponse hook writes one safe line instead.
     logController: new LogController({ disableRequestLogging: true }),
   });
-  const check = verify ?? makeVerifier(config as Config);
+  // Sign-in emails: through the mail server when one is set, otherwise into the log (development).
+  const mail: Mailer =
+    mailer ??
+    (config.SMTP_URL
+      ? smtpMailer(config.SMTP_URL, config.MAIL_FROM ?? 'Finken <no-reply@localhost>')
+      : logMailer(config.NODE_ENV === 'test' ? () => {} : (line) => console.log(line)));
+  const passwords =
+    config.AUTH_MODE === 'password' && config.AUTH_SECRET
+      ? new SignInService({
+          db,
+          secret: config.AUTH_SECRET,
+          appUrl: config.APP_URL ?? 'http://localhost:5173',
+          mailer: mail,
+          log: (message, err) => app.log.error({ err: { message: (err as Error)?.message } }, message),
+        })
+      : null;
+  const check: Verifier = verify ?? (passwords ? (token) => passwords.readAccessToken(token) : makeVerifier(config as Config & { AUTH_MODE: 'oidc' | 'dev' }));
+  const secureCookie = production;
+  const setSessionCookie = (reply: FastifyReply, token: string | null) =>
+    reply.header(
+      'set-cookie',
+      token
+        ? `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${30 * 86_400}${secureCookie ? '; Secure' : ''}`
+        : `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${secureCookie ? '; Secure' : ''}`,
+    );
   const access = betaAccess(config);
   /** The signed-in person as the app sees them. */
   const meOf = (u: AuthUser) => ({
@@ -109,6 +184,8 @@ export function buildApp({ db, config, verify, limits = {}, logStream, pushHosts
     timeZone: u.timeZone,
     access: access === 'open' || u.joinedBeta ? 'member' : 'invite-needed',
     usage: u.usage,
+    signIn: u.hasPassword ? 'password' : config.AUTH_MODE === 'oidc' ? 'provider' : 'development',
+    emailVerified: u.emailVerified,
   });
   const metrics = new Metrics();
   app.decorate('metrics', metrics);
@@ -130,6 +207,12 @@ export function buildApp({ db, config, verify, limits = {}, logStream, pushHosts
     usage: budget('usage', { max: 30, windowMs: MINUTE }),
     // Wrong Space invite codes, like beta codes: plenty for typos, far too few to guess.
     spaceJoin: budget('spaceJoin', { max: 10, windowMs: 60 * MINUTE }),
+    // Finken's own sign-in, per address (each account also waits after 5 wrong passwords).
+    login: budget('login', { max: 30, windowMs: 10 * MINUTE }),
+    register: budget('register', { max: 10, windowMs: 60 * MINUTE }),
+    forgot: budget('forgot', { max: 5, windowMs: 60 * MINUTE }),
+    refresh: budget('refresh', { max: 120, windowMs: MINUTE }),
+    emailLink: budget('emailLink', { max: 30, windowMs: 60 * MINUTE }),
   };
   const limited = (name: LimitName, key: string, reply: FastifyReply) => {
     const stopped = overLimit(limiters[name], key, reply);
@@ -177,6 +260,7 @@ export function buildApp({ db, config, verify, limits = {}, logStream, pushHosts
   const REASONS: Record<number, string> = { 400: 'shape', 403: 'permission', 409: 'conflict', 422: 'money_rules' };
   app.setErrorHandler((err: Error, req, reply) => {
     if (err instanceof SharingError) return reply.code(err.status).send({ error: err.message });
+    if (err instanceof SignInError) return reply.code(err.status).send({ error: err.message, ...(err.field ? { field: err.field } : {}) });
     const known = err instanceof BatchError ? err : constraintMessage(err);
     if (known) {
       if (routeOf(req) === '/v1/batch') metrics.refused.inc({ reason: REASONS[known.status] ?? 'other' });
@@ -203,6 +287,79 @@ export function buildApp({ db, config, verify, limits = {}, logStream, pushHosts
     });
   }
 
+  // ── Finken's own sign-in ─────────────────────────────────────────────────
+  if (passwords) {
+    /** A session for the device: the access token in the answer, the refresh token in the cookie. */
+    const signedIn = (reply: FastifyReply, s: { accessToken: string; expiresAt: number; refreshToken?: string }) => {
+      if (s.refreshToken) setSessionCookie(reply, s.refreshToken);
+      return reply.send({ accessToken: s.accessToken, expiresAt: s.expiresAt });
+    };
+    const needsHeader = (req: FastifyRequest, reply: FastifyReply) => {
+      if (req.headers[SESSION_HEADER] === '1') return false;
+      reply.code(403).send({ error: 'Sign in again.' });
+      return true;
+    };
+
+    app.post('/v1/auth/register', async (req, reply) => {
+      if (limited('register', req.ip, reply)) return reply;
+      return signedIn(reply.code(201), await passwords.register(Register.parse(req.body ?? {})));
+    });
+
+    app.post('/v1/auth/login', async (req, reply) => {
+      if (limited('login', req.ip, reply)) return reply;
+      const { email, password } = Login.parse(req.body ?? {});
+      return signedIn(reply, await passwords.login(email, password));
+    });
+
+    app.post('/v1/auth/refresh', async (req, reply) => {
+      if (limited('refresh', req.ip, reply) || needsHeader(req, reply)) return reply;
+      const token = cookieValue(req.headers.cookie, SESSION_COOKIE);
+      if (!token) return reply.code(401).send({ error: 'Sign in again.' });
+      try {
+        return signedIn(reply, await passwords.refresh(token));
+      } catch (err) {
+        if (err instanceof SignInError) setSessionCookie(reply, null);
+        throw err;
+      }
+    });
+
+    app.post('/v1/auth/logout', async (req, reply) => {
+      if (needsHeader(req, reply)) return reply;
+      const token = cookieValue(req.headers.cookie, SESSION_COOKIE);
+      if (token) await passwords.logout(token);
+      setSessionCookie(reply, null);
+      return reply.code(204).send();
+    });
+
+    /** Always the same answer, whether or not the email has an account. */
+    app.post('/v1/auth/forgot', async (req, reply) => {
+      const { email } = Forgot.parse(req.body ?? {});
+      if (limited('forgot', req.ip, reply) || limited('forgot', `email:${email.trim().toLowerCase()}`, reply)) return reply;
+      await passwords.forgotPassword(email);
+      return reply.code(202).send({ ok: true });
+    });
+
+    app.post('/v1/auth/reset', async (req, reply) => {
+      if (limited('emailLink', req.ip, reply)) return reply;
+      const { token, password } = Reset.parse(req.body ?? {});
+      return signedIn(reply, await passwords.resetPassword(token, password));
+    });
+
+    app.post('/v1/auth/verify', async (req, reply) => {
+      if (limited('emailLink', req.ip, reply)) return reply;
+      await passwords.confirmEmail(Confirm.parse(req.body ?? {}).token);
+      return reply.code(204).send();
+    });
+
+    // Development only: the emails Finken would have sent, so links can be opened without a mail server.
+    const recent = mail.recent;
+    if (recent && (config.NODE_ENV === 'development' || config.NODE_ENV === 'test')) {
+      app.get<{ Querystring: { to?: string } }>('/v1/dev/mail', async (req) => ({
+        emails: recent().filter((e) => !req.query.to || e.to === req.query.to.toLowerCase()),
+      }));
+    }
+  }
+
   // ── Everything below needs a signed-in user ──────────────────────────────
   app.register(async (api) => {
     api.addHook('onRequest', async (req: FastifyRequest, reply: FastifyReply) => {
@@ -211,7 +368,11 @@ export function buildApp({ db, config, verify, limits = {}, logStream, pushHosts
       const token = header.startsWith('Bearer ') ? header.slice(7) : '';
       try {
         if (!token) throw new Error('missing');
-        req.user = await userFor(db, await check(token));
+        const identity = await check(token);
+        // Finken's own sign-in: the token's session must still be open (logging out ends it at once).
+        if (passwords && (!identity.sessionId || !(await passwords.sessionOpen(identity.sessionId)))) throw new Error('session ended');
+        req.user = await userFor(db, identity, !passwords);
+        req.sessionId = identity.sessionId;
       } catch {
         if (limited('signInFailures', req.ip, reply)) return reply;
         return reply.code(401).send({ error: 'Sign in again.' });
@@ -225,6 +386,24 @@ export function buildApp({ db, config, verify, limits = {}, logStream, pushHosts
     });
 
     api.get('/v1/me', async (req) => meOf(req.user));
+
+    if (passwords) {
+      /** A new password; every other device is signed out. */
+      api.post('/v1/auth/password', async (req, reply) => {
+        if (limited('login', req.ip, reply)) return reply;
+        const { current, password } = ChangePassword.parse(req.body ?? {});
+        await passwords.changePassword(req.user.id, req.sessionId ?? '', current, password);
+        return reply.code(204).send();
+      });
+
+      /** Signs out every other device. */
+      api.post('/v1/auth/logout-others', async (req) => ({ ended: await passwords.logoutEverywhere(req.user.id, req.sessionId) }));
+
+      api.post('/v1/auth/verify/resend', async (req, reply) => {
+        if (limited('forgot', `user:${req.user.id}`, reply)) return reply;
+        return { sent: await passwords.resendConfirmation(req.user.id) };
+      });
+    }
 
     api.patch('/v1/me', async (req) => {
       const patch = MePatch.parse(req.body ?? {});

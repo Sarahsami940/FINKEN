@@ -71,7 +71,8 @@ CI also checks that a real API's logs hold no tokens or emails after a load test
 
 ## Before launch
 
-- Choose the sign-in provider and set `AUTH_MODE=oidc`. Turn on multi-factor sign-in there.
+- Set `AUTH_MODE=password` with a fresh `AUTH_SECRET`, `APP_URL`, and the mail server (`SMTP_URL`, `MAIL_FROM`) ([SIGN-IN.md](SIGN-IN.md)). Finken's own sign-in is built and tested: scrypt password hashes, per-account waiting after 5 wrong passwords, refresh tokens in an HttpOnly SameSite=Strict cookie that change on every use (a reused one ends the session), and sessions checked on every request.
+- Still to add before or soon after launch: two-step sign-in (a code from an authenticator app), and checking new passwords against the large lists of breached passwords (for example the k-anonymity range lookup, which never sends the password).
 - An independent penetration test of the API and web app, after the sign-in provider is in place.
 - Rate-limit counts in a shared store once there is more than one API instance.
 - The web host's headers above, checked with a scanner.

@@ -9,7 +9,7 @@ import { startReminders } from './data/reminders';
 import { store } from './data/store';
 import { track } from './data/usage';
 import { useLocalSpaces } from './onboarding/MoveData';
-import { FirstSpaceStep, InviteStep, MoveDataStep, Onboarding } from './onboarding/Onboarding';
+import { ConfirmEmailStep, FirstSpaceStep, InviteStep, MoveDataStep, Onboarding, ResetPasswordStep, SignInCallback } from './onboarding/Onboarding';
 import { HomePage } from './pages/HomePage';
 import { MoneyPage } from './pages/MoneyPages';
 import { MorePage, SpacesPage } from './pages/MorePages';
@@ -60,6 +60,11 @@ export function App() {
   }, []);
 
   if (!ready || !local.spaces) return <Loading />;
+  // Back from the sign-in provider's page.
+  if (account?.provider && window.location.pathname === '/auth/callback') return <SignInCallback account={account} />;
+  // Links from Finken's emails: setting a new password, and confirming the address.
+  if (account && !account.provider && window.location.pathname === '/auth/reset') return <ResetPasswordStep account={account} />;
+  if (account && !account.provider && window.location.pathname === '/auth/verify') return <ConfirmEmailStep account={account} />;
   // Nobody has entered yet: welcome, sign-up, login or guest.
   if (!user) return <Onboarding />;
   // The closed beta: signed in, but the invite code comes before anything else.

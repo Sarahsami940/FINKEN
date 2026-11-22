@@ -21,7 +21,10 @@ The API reads these settings when it starts (`apps/api/src/config.ts`). It stops
 | `HOST` | No | `127.0.0.1` | Address to listen on. The container sets `0.0.0.0`. |
 | `PORT` | No | `4000` | Port to listen on |
 | `LOG_LEVEL` | No | `info` | `fatal`, `error`, `warn`, `info`, `debug`, `trace` or `silent` |
-| `AUTH_MODE` | No | `dev` | `oidc` (the sign-in provider's tokens) or `dev` (tokens the API signs itself). `dev` is refused in staging and production. |
+| `AUTH_MODE` | Yes outside development | `dev` | `password`: Finken's own sign-in (accounts, password hashes and sessions in Finken's database; [SIGN-IN.md](SIGN-IN.md)). `oidc`: an outside provider's tokens. `dev`: tokens for any identity, for tests; refused in staging and production. |
+| `AUTH_SECRET` | With `password` | none | At least 32 random characters; signs Finken's access tokens. A secret. |
+| `APP_URL` | With `password` | `http://localhost:5173` | The web app's address, for links in emails. https in staging and production. |
+| `SMTP_URL`, `MAIL_FROM` | With `password`, in staging and production | none | The mail server that sends "confirm your email" and "set a new password", and who the emails are from. Without them (development), emails are written to the log instead. |
 | `AUTH_ISSUER` | With `oidc` | none | The provider's token issuer, exactly as it appears in its tokens |
 | `AUTH_AUDIENCE` | With `oidc` | none | The audience the provider puts in tokens meant for Finken |
 | `AUTH_JWKS_URL` | With `oidc` | none | The provider's public keys (https), for checking token signatures |
@@ -56,6 +59,7 @@ The web app has one setting, read when it is built:
 | Setting | Meaning |
 | --- | --- |
 | `VITE_API_URL` | Where the API is, for example `/api`. Set: account mode (records on the server, offline copy in the browser). Not set: everything stays in the browser, as before. `npm run dev:account` sets it from `apps/web/.env.account`. |
+| `VITE_AUTH_ISSUER`, `VITE_AUTH_CLIENT_ID` | The sign-in provider's address and the client id it gives Finken ([SIGN-IN.md](SIGN-IN.md)). Set: people sign in on the provider's page. Not set: the development sign-in, which only a development API accepts. `npm run dev:sign-in` sets them for the stand-in provider. |
 
 
 `npm run build -w @finken/web` writes a static site to `apps/web/dist`, which any static host or CDN can serve. Point `/api/*` at the API on the same domain, so the browser never makes a cross-origin request.

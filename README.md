@@ -218,7 +218,7 @@ In development the web app forwards `/api/*` to the API, so the browser never ne
 **Account mode** (records on the API, with an offline copy in the browser):
 
 ```bash
-npm run dev:api          # or, without Docker: npm run dev:api:memory (an in-memory database, emptied when stopped)
+npm run dev:api          # or, without Docker: npm run dev:api:local (keeps data in apps/api/.local-data), or dev:api:memory (emptied when stopped)
 npm run dev:account      # the web app with VITE_API_URL=/api (apps/web/.env.account)
 ```
 
@@ -255,7 +255,8 @@ npm run load -w @finken/e2e  # 20 people at once; checks every expense arrives e
 - [docs/OPERATIONS.md](docs/OPERATIONS.md): monitoring, the nightly check, backups and restores, load testing;
 - [docs/LEGAL-PAKISTAN.md](docs/LEGAL-PAKISTAN.md): questions for a lawyer before launch;
 - [docs/BETA.md](docs/BETA.md): the closed beta, invite codes, feedback and the launch gates;
-- [docs/BUSINESS.md](docs/BUSINESS.md): Business Mode, sharing a Space, and the reports.
+- [docs/BUSINESS.md](docs/BUSINESS.md): Business Mode, sharing a Space, and the reports;
+- [docs/SIGN-IN.md](docs/SIGN-IN.md): signing in through a provider, connecting one, and trying it with the stand-in.
 
 ## 8. Known limitations
 

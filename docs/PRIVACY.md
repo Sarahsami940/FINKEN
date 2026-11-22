@@ -6,7 +6,10 @@ What Finken keeps about people, why, for how long, and how they get a copy or ha
 
 | Data | Where | Why |
 | --- | --- | --- |
-| Sign-in identity (provider subject) and email | `users` table; the provider holds passwords | To know whose records are whose |
+| Email and sign-in identity | `users` table | To know whose records are whose, and where to send password reset links |
+| Password | Only a scrypt hash in the `users` table: it cannot be turned back into the password, by anyone | Signing in |
+| Signed-in devices | `sessions`: when each started and was last used, and a hash of its refresh token. No IP address, device name or location | Keeping people signed in, and signing devices out |
+| Emailed links | `email_tokens`: hashes only, removed with the account | Confirming the email and resetting the password |
 | Name and time zone | `users` table | To greet them and to know what "today" means |
 | Spaces and everything in them: accounts, categories, transactions, money owed, people they record, recurring items, budgets, goals | The Space tables | It is the service |
 | Who changed each record and when | Columns on each record | Change history, sync and conflict handling |

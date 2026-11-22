@@ -2,7 +2,7 @@ import { SPACE_TYPE_META } from '@finken/domain/defaults';
 import { CURRENCIES, DEFAULT_CURRENCY } from '@finken/domain/format';
 import type { SpaceType } from '@finken/domain/types';
 import { ArrowLeft, ArrowRight, Check } from 'lucide-react';
-import { type FormEvent, type ReactNode, useState } from 'react';
+import { type FormEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import { Button } from '../components/ui/Button';
 import { cn } from '../components/ui/cn';
 import { Field, Input, Select } from '../components/ui/Field';
@@ -11,6 +11,7 @@ import { type Account, account } from '../data/account';
 import { useAppState } from '../data/hooks';
 import { leaveFinken } from '../data/session';
 import { store } from '../data/store';
+import { AccountLoginForm, AccountRegisterForm, ForgotPasswordForm, ResetPasswordForm, useEmailConfirmation } from './AccountForms';
 import { LoginForm, PrototypeNotice, RegisterForm } from './AuthForms';
 import { MoveData } from './MoveData';
 
@@ -245,46 +246,104 @@ export function FirstSpaceStep() {
   );
 }
 
-type Step = 'welcome' | 'register' | 'login' | 'guest';
+type Step = 'welcome' | 'register' | 'login' | 'guest' | 'forgot';
 
-/** Account mode: sign in to the account on Finken's server. */
-function AccountSignIn({ account, onBack }: { account: Account; onBack: () => void }) {
-  const [email, setEmail] = useState('');
-  const [name, setName] = useState('');
+/** With a sign-in provider: Finken's own page only explains, and the provider's page does the rest. */
+function ProviderSignIn({ account, signUp, onBack }: { account: Account; signUp: boolean; onBack: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  async function submit(e: FormEvent) {
-    e.preventDefault();
+  async function go() {
     setBusy(true);
     setError(null);
-    const signedIn = await account.signIn(email, name);
-    const result = signedIn.ok ? await store.signInWithProvider() : signedIn;
-    setBusy(false);
-    if (!result.ok) return setError(result.error);
-    account.start();
+    const failed = await account.startSignIn({ signUp });
+    // On success the browser is already on its way to the provider.
+    if (failed) {
+      setError(failed.error);
+      setBusy(false);
+    }
   }
 
   return (
     <Frame onBack={onBack}>
-      <Heading title="Sign in to Finken" subtitle="Your records are kept in your account, so they are on every device you sign in on, and still work offline." />
-      <form onSubmit={submit} noValidate className="space-y-4">
-        <Field label="Email">{(id) => <Input id={id} type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />}</Field>
-        <Field label="Your name" hint="Only needed the first time.">
-          {(id) => <Input id={id} autoComplete="name" maxLength={40} value={name} onChange={(e) => setName(e.target.value)} />}
-        </Field>
-        {error && (
-          <p role="alert" className="rounded-control bg-negative-soft px-3.5 py-2.5 text-sm font-semibold text-negative">
-            {error}
-          </p>
-        )}
-        <Button type="submit" variant="primary" size="lg" block disabled={busy || !email.trim()}>
-          {busy ? 'Signing in…' : 'Sign in'}
+      <Heading
+        title={signUp ? 'Create your Finken account' : 'Sign in to Finken'}
+        subtitle="You sign in on our secure sign-in page, then come straight back. Your records are kept in your account, so they are on every device you use, and still work offline."
+      />
+      {error && (
+        <p role="alert" className="mb-4 rounded-control bg-negative-soft px-3.5 py-2.5 text-sm font-semibold text-negative">
+          {error}
+        </p>
+      )}
+      <Button variant="primary" size="lg" block disabled={busy} onClick={() => void go()}>
+        {busy ? 'Opening the sign-in page…' : signUp ? 'Continue to create your account' : 'Continue to sign in'}
+      </Button>
+      <p className="mt-5 text-center text-sm text-ink-3">Finken never sees your password.</p>
+    </Frame>
+  );
+}
+
+/** Back from the provider's page at /auth/callback: finishes signing in, then opens Finken. */
+export function SignInCallback({ account }: { account: Account }) {
+  const [error, setError] = useState<string | null>(null);
+  const started = useRef(false);
+
+  useEffect(() => {
+    // Once only: the code in the address works a single time.
+    if (started.current) return;
+    started.current = true;
+    void (async () => {
+      const done = await account.finishSignIn(window.location.href);
+      window.history.replaceState(null, '', '/');
+      const result = done.ok ? await store.signInWithProvider() : done;
+      if (!result.ok) return setError(result.error);
+      account.start();
+    })();
+  }, [account]);
+
+  return (
+    <Frame>
+      {error ? (
+        <>
+          <Heading title="Signing in did not finish" subtitle={error} />
+          <Button variant="primary" size="lg" block onClick={() => void account.startSignIn()}>
+            Try again
+          </Button>
+        </>
+      ) : (
+        <p role="status" className="text-center text-[15px] font-semibold text-ink-2">
+          Signing you in…
+        </p>
+      )}
+    </Frame>
+  );
+}
+
+/** Opened from the "set a new password" email. */
+export function ResetPasswordStep({ account }: { account: Account }) {
+  return (
+    <Frame onBack={() => window.location.assign('/')} backLabel="Cancel">
+      <Heading title="Choose a new password" subtitle="Setting it signs you out of every other device, in case someone else had your old one." />
+      {/* Signed in now: open Finken fresh, as this account. */}
+      <ResetPasswordForm account={account} onDone={() => window.location.replace('/')} />
+    </Frame>
+  );
+}
+
+/** Opened from the "confirm your email" link. */
+export function ConfirmEmailStep({ account }: { account: Account }) {
+  const { done, error } = useEmailConfirmation(account);
+  return (
+    <Frame>
+      <Heading
+        title={!done ? 'Confirming your email…' : error ? 'That link did not work' : 'Your email is confirmed'}
+        subtitle={!done ? 'One moment.' : (error ?? 'Thank you. You can carry on using Finken.')}
+      />
+      {done && (
+        <Button variant="primary" size="lg" block onClick={() => window.location.assign('/')}>
+          Open Finken
         </Button>
-      </form>
-      <p className="mt-6 rounded-control bg-sunken px-3.5 py-3 text-[13px] leading-relaxed text-ink-2">
-        Development sign-in: there is no password yet. The real sign-in screen replaces this once the sign-in provider is chosen.
-      </p>
+      )}
     </Frame>
   );
 }
@@ -362,10 +421,41 @@ export function MoveDataStep({ account, onDone }: { account: Account; onDone: (c
 export function Onboarding() {
   const [step, setStep] = useState<Step>('welcome');
   const [busy, setBusy] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
 
   if (account) {
-    if (step === 'welcome') return <Welcome onStart={() => setStep('login')} onLogin={() => setStep('login')} />;
-    return <AccountSignIn account={account} onBack={() => setStep('welcome')} />;
+    if (step === 'welcome') return <Welcome onStart={() => setStep('register')} onLogin={() => setStep('login')} />;
+    if (account.provider) return <ProviderSignIn account={account} signUp={step === 'register'} onBack={() => setStep('welcome')} />;
+    // Finken's own sign-in.
+    if (step === 'register') {
+      return (
+        <Frame onBack={() => setStep('welcome')}>
+          <Heading title="Create your Finken account" subtitle="Your records are kept in your account, so they are on every device you sign in on, and still work offline." />
+          <AccountRegisterForm account={account} onLogin={() => setStep('login')} />
+        </Frame>
+      );
+    }
+    if (step === 'forgot') {
+      return (
+        <Frame onBack={() => setStep('login')}>
+          <Heading title="Set a new password" subtitle="Enter your account’s email, and we will send you a link to choose a new password." />
+          <ForgotPasswordForm account={account} initialEmail={forgotEmail} onBack={() => setStep('login')} />
+        </Frame>
+      );
+    }
+    return (
+      <Frame onBack={() => setStep('welcome')}>
+        <Heading title="Welcome back" subtitle="Log in to your Finken account." />
+        <AccountLoginForm
+          account={account}
+          onRegister={() => setStep('register')}
+          onForgot={(email) => {
+            setForgotEmail(email);
+            setStep('forgot');
+          }}
+        />
+      </Frame>
+    );
   }
 
   if (step === 'welcome') {

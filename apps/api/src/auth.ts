@@ -7,6 +7,8 @@ export interface Identity {
   subject: string;
   email?: string;
   name?: string;
+  /** Finken's own sign-in: the session the token belongs to, checked on every request. */
+  sessionId?: string;
 }
 
 /** A signed-in Finken user, as stored in the users table. */
@@ -21,6 +23,9 @@ export interface AuthUser {
   usage: 'yes' | 'no' | null;
   /** Already counted among today's people (daily_health). */
   seenToday: boolean;
+  /** Signs in with a Finken password (as opposed to an outside provider or the development sign-in). */
+  hasPassword: boolean;
+  emailVerified: boolean;
 }
 
 export type Verifier = (token: string) => Promise<Identity>;
@@ -41,7 +46,7 @@ function identityFrom(payload: JWTPayload): Identity {
  * match. Nothing about the provider is hard-coded, so Supabase, Clerk, Auth0 or
  * any other standard provider works by changing settings only.
  */
-export function makeVerifier(config: Pick<Config, 'AUTH_MODE' | 'AUTH_ISSUER' | 'AUTH_AUDIENCE' | 'AUTH_JWKS_URL' | 'AUTH_DEV_SECRET'>): Verifier {
+export function makeVerifier(config: Pick<Config, 'AUTH_ISSUER' | 'AUTH_AUDIENCE' | 'AUTH_JWKS_URL' | 'AUTH_DEV_SECRET'> & { AUTH_MODE: 'oidc' | 'dev' }): Verifier {
   if (config.AUTH_MODE === 'dev') {
     const key = new TextEncoder().encode(config.AUTH_DEV_SECRET);
     return async (token) => identityFrom((await jwtVerify(token, key, { issuer: DEV_ISSUER, audience: DEV_AUDIENCE, algorithms: ['HS256'] })).payload);
@@ -63,13 +68,29 @@ export function devToken(secret: string, identity: Identity, expiresIn = '1h'): 
     .sign(new TextEncoder().encode(secret));
 }
 
-/** Finds the Finken user for a provider identity, creating them on their first request. */
-export async function userFor(db: Db, identity: Identity): Promise<AuthUser> {
-  type Row = { id: string; email: string | null; name: string; time_zone: string; joined: boolean; usage: 'yes' | 'no' | null; seen: boolean };
+/**
+ * Finds the Finken user for an identity. With an outside provider they are
+ * created on their first request; with Finken's own sign-in (`create`
+ * false) they must already exist, so a deleted account never comes back.
+ */
+export async function userFor(db: Db, identity: Identity, create = true): Promise<AuthUser> {
+  type Row = {
+    id: string;
+    email: string | null;
+    name: string;
+    time_zone: string;
+    joined: boolean;
+    usage: 'yes' | 'no' | null;
+    seen: boolean;
+    has_password: boolean;
+    verified: boolean;
+  };
   const COLUMNS = `id, email, name, time_zone, beta_joined_at is not null as joined, usage_consent as usage,
-    coalesce(last_seen_on = (now() at time zone 'utc')::date, false) as seen`;
+    coalesce(last_seen_on = (now() at time zone 'utc')::date, false) as seen,
+    password_hash is not null as has_password, email_verified_at is not null as verified`;
   const find = () => db.query<Row>(`select ${COLUMNS} from users where auth_subject = $1`, [identity.subject]);
   let [row] = await find();
+  if (!row && !create) throw new Error('No such account');
   if (!row) {
     // Two first requests at once both try; the loser finds the winner's row.
     [row] = await db.query<Row>(
@@ -79,5 +100,15 @@ export async function userFor(db: Db, identity: Identity): Promise<AuthUser> {
     );
     row ??= (await find())[0];
   }
-  return { id: row.id, email: row.email, name: row.name, timeZone: row.time_zone, joinedBeta: row.joined, usage: row.usage, seenToday: row.seen };
+  return {
+    id: row.id,
+    email: row.email,
+    name: row.name,
+    timeZone: row.time_zone,
+    joinedBeta: row.joined,
+    usage: row.usage,
+    seenToday: row.seen,
+    hasPassword: row.has_password,
+    emailVerified: row.verified,
+  };
 }

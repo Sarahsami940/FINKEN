@@ -4,14 +4,11 @@
  * sent from any screen. The test API runs invite-only with INVITE_CODE.
  */
 import { expect, type Page, test } from '@playwright/test';
-import { ACCOUNT_URL, expectAccessible, INVITE_CODE } from './helpers';
+import { ACCOUNT_URL, expectAccessible, INVITE_CODE, signUp } from './helpers';
 
 async function signInOnly(page: Page, email: string) {
   await page.goto(ACCOUNT_URL);
-  await page.getByRole('button', { name: 'Get Started' }).click();
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Your name').fill('Noor');
-  await page.getByRole('button', { name: 'Sign in' }).click();
+  await signUp(page, email, 'Noor');
 }
 
 test('the invite code comes first; a wrong one is explained; the right one lets you in', async ({ page }) => {

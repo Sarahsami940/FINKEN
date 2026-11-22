@@ -10,10 +10,22 @@ const Config = z
     DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
     /**
      * How sign-in tokens are checked.
-     * - oidc: tokens from the sign-in provider (Supabase, Clerk, Auth0…), checked against its published keys.
-     * - dev: tokens the API signs itself with AUTH_DEV_SECRET. Development and tests only.
+     * - password: Finken's own sign-in. Accounts, password hashes and sessions in Finken's database (signIn.ts).
+     * - oidc: tokens from an outside sign-in provider (Auth0, Okta, Entra ID…), checked against its published keys.
+     * - dev: tokens the API signs itself with AUTH_DEV_SECRET for any identity. Development and tests only.
      */
-    AUTH_MODE: z.enum(['oidc', 'dev']).default('dev'),
+    AUTH_MODE: z.enum(['password', 'oidc', 'dev']).default('dev'),
+    /** Signs Finken's own access tokens (password mode). A secret: at least 32 random characters. */
+    AUTH_SECRET: z.string().min(32, 'must be at least 32 characters').optional(),
+    /** The web app's address, for links in emails, such as https://app.finken.pk */
+    APP_URL: z.url().default('http://localhost:5173'),
+    /** The mail server for sign-in emails, such as smtps://user:password@mail.example.com:465. Without it, emails go to the log. */
+    SMTP_URL: z
+      .string()
+      .regex(/^smtps?:\/\//, 'must start with smtp:// or smtps://')
+      .optional(),
+    /** Who sign-in emails come from, such as "Finken <no-reply@finken.pk>". */
+    MAIL_FROM: z.string().min(3).optional(),
     AUTH_ISSUER: z.string().optional(),
     AUTH_AUDIENCE: z.string().optional(),
     AUTH_JWKS_URL: z.url({ protocol: /^https$/ }).optional(),
@@ -39,7 +51,13 @@ const Config = z
   })
   .superRefine((c, ctx) => {
     const problem = (path: string, message: string) => ctx.addIssue({ code: 'custom', path: [path], message });
-    if (c.AUTH_MODE === 'dev') {
+    const live = c.NODE_ENV === 'staging' || c.NODE_ENV === 'production';
+    if (c.AUTH_MODE === 'password') {
+      if (!c.AUTH_SECRET) problem('AUTH_SECRET', 'required when AUTH_MODE is password');
+      if (live && !c.APP_URL.startsWith('https://')) problem('APP_URL', 'must be https in staging and production');
+      if (live && !c.SMTP_URL) problem('SMTP_URL', 'required in staging and production, so password reset emails can be sent');
+      if (live && !c.MAIL_FROM) problem('MAIL_FROM', 'required in staging and production');
+    } else if (c.AUTH_MODE === 'dev') {
       if (c.NODE_ENV === 'staging' || c.NODE_ENV === 'production') problem('AUTH_MODE', 'dev sign-in is never allowed in staging or production');
       if (!c.AUTH_DEV_SECRET) problem('AUTH_DEV_SECRET', 'required when AUTH_MODE is dev');
     } else {

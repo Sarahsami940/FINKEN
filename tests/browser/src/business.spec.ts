@@ -4,7 +4,7 @@
  */
 import { readFile } from 'node:fs/promises';
 import { type Browser, expect, type Page, test } from '@playwright/test';
-import { ACCOUNT_URL, enterAsGuest, expectAccessible, INVITE_CODE } from './helpers';
+import { ACCOUNT_URL, enterAsGuest, expectAccessible, INVITE_CODE, signUp } from './helpers';
 
 /** Someone new, signed in to the closed beta, with their first Space made. */
 async function newPerson(browser: Browser, email: string, name: string, spaceType: RegExp) {
@@ -12,10 +12,7 @@ async function newPerson(browser: Browser, email: string, name: string, spaceTyp
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: ACCOUNT_URL });
   const page = await context.newPage();
   await page.goto(ACCOUNT_URL);
-  await page.getByRole('button', { name: 'Get Started' }).click();
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Your name').fill(name);
-  await page.getByRole('button', { name: 'Sign in' }).click();
+  await signUp(page, email, name);
   await page.getByLabel('Invite code').fill(INVITE_CODE);
   await page.getByRole('button', { name: 'Join the beta' }).click();
   await page.getByRole('radio', { name: spaceType }).click();

@@ -12,9 +12,11 @@ export async function leaveFinken() {
   if (account) {
     // The next person on this device must not get this person's reminders.
     await turnOffReminders().catch(() => {});
-    await account.signOut();
+    const providerSignOut = await account.signOut();
+    // End the provider's own session too, when it offers that; it sends people back here.
+    if (providerSignOut) window.location.assign(providerSignOut);
     // Start clean, so nothing of this account stays on screen for the next person.
-    window.location.reload();
+    else window.location.reload();
   }
 }
 

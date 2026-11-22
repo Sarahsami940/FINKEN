@@ -7,6 +7,22 @@ export const ACCOUNT_URL = 'http://localhost:5192';
 export const BUILT_URL = 'http://localhost:5193';
 /** The test API is a closed beta; this code lets anyone in (see playwright.config.ts). */
 export const INVITE_CODE = 'FNK-TEST-2026';
+/** The password every test account uses: long enough, and not a common one. */
+export const TEST_PASSWORD = 'tea by the river at four';
+
+/** Creates a Finken account from the welcome screen (Finken's own sign-in). */
+export async function signUp(page: Page, email: string, name: string, password = TEST_PASSWORD) {
+  await page.getByRole('button', { name: 'Get Started' }).click();
+  await page.getByLabel('Your name').fill(name);
+  await page.getByLabel('Email').fill(email);
+  await page.getByLabel('Password', { exact: true }).fill(password);
+  await page.getByLabel('Type the password again').fill(password);
+  await page.getByRole('button', { name: 'Create account' }).click();
+}
+
+/** Account mode with the real sign-in path, and the stand-in sign-in provider it uses. */
+export const SIGN_IN_URL = 'http://localhost:5194';
+export const SIGN_IN_PROVIDER = 'http://127.0.0.1:4401';
 
 /** Reads "Rs. 2,665,000" or "Rs. 1,250.50" as paisa. */
 export function paisa(text: string): number {

@@ -2,6 +2,7 @@ import { currentTimeZone, DEFAULT_TIME_ZONE, deviceTimeZone, isValidTimeZone } f
 import { ArrowDownToLine, Bell, BellOff, Download, LogOut, MonitorSmartphone, RefreshCw, Trash2, UserRoundPlus } from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
 import { FeedbackButton, USAGE_EXPLAINED, useUsageChoice } from '../components/beta/Beta';
+import { SecurityCard } from '../components/beta/SecurityCard';
 import { Button } from '../components/ui/Button';
 import { Card, CardHeader } from '../components/ui/Card';
 import { Field, Input, Select } from '../components/ui/Field';
@@ -341,8 +342,8 @@ export function SettingsPage() {
             {account && (
               <div className="flex justify-between gap-6 py-3">
                 <dt className="text-ink-3">Sync</dt>
-                <dd role="status" className="text-right font-semibold text-ink">
-                  {syncText(sync)}
+                <dd className="text-right font-semibold text-ink">
+                  <span role="status">{syncText(sync)}</span>
                 </dd>
               </div>
             )}
@@ -361,6 +362,8 @@ export function SettingsPage() {
         </Card>
 
         <DeviceCard />
+
+        <SecurityCard />
 
         {account && <BetaCard />}
 

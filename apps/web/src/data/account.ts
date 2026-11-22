@@ -13,17 +13,42 @@ import type { ID } from '@finken/domain/types';
 import { useSyncExternalStore } from 'react';
 import { ApiAuthService, ApiClient, ApiError, type Me } from './api';
 import { LocalDataMover } from './migration';
+import { OidcClient, oidcSettings, SignInError, type Tokens } from './oidc';
 import { IndexedDbAdapter, MemoryAdapter, type StorageAdapter } from './storage';
 import { SyncedStorage } from './sync';
 
 const TOKEN_KEY = 'finken:token';
+const SESSION_KEY = 'finken:session';
 const PROFILE_KEY = 'finken:profile';
 
 /** What the server says about this person beyond their name: whether they are in the beta, and whether usage may be counted. */
 export interface Profile {
   access: 'member' | 'invite-needed';
   usage: 'yes' | 'no' | null;
+  signIn?: 'password' | 'provider' | 'development';
+  emailVerified?: boolean;
 }
+
+/** A sign-in form's outcome: the message to show, and the field it is about. */
+export type FormResult = { ok: true } | { ok: false; error: string; field?: string };
+
+/** Finken's own sign-in keeps only this on the device: the session itself is in a cookie page scripts cannot read. */
+const SIGNED_IN_KEY = 'finken:signed-in';
+const remembered = () => {
+  try {
+    return localStorage.getItem(SIGNED_IN_KEY) === '1';
+  } catch {
+    return false;
+  }
+};
+const remember = (on: boolean) => {
+  try {
+    if (on) localStorage.setItem(SIGNED_IN_KEY, '1');
+    else localStorage.removeItem(SIGNED_IN_KEY);
+  } catch {
+    // Then the device asks the server whether it is signed in each time Finken opens.
+  }
+};
 
 export type FeedbackKind = 'problem' | 'idea' | 'praise';
 
@@ -67,18 +92,23 @@ const OFFLINE = 'Finken could not reach its server. Check your connection and tr
 /** This device's copy of the account's records, kept apart from the data Finken saved before accounts. */
 const ACCOUNT_DB = 'finken-account';
 
-function readToken(): string | null {
+/** The saved sign-in. A development token saved before tokens were renewable is kept as it is. */
+function readSession(): Tokens | null {
   try {
-    return localStorage.getItem(TOKEN_KEY);
+    const saved = localStorage.getItem(SESSION_KEY);
+    if (saved) return JSON.parse(saved) as Tokens;
+    const old = localStorage.getItem(TOKEN_KEY);
+    return old ? { idToken: old, expiresAt: Number.POSITIVE_INFINITY } : null;
   } catch {
     return null;
   }
 }
 
-function writeToken(token: string | null) {
+function writeSession(session: Tokens | null) {
   try {
-    if (token) localStorage.setItem(TOKEN_KEY, token);
-    else localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(TOKEN_KEY);
+    if (session) localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    else localStorage.removeItem(SESSION_KEY);
   } catch {
     // Without storage the sign-in lasts until the page closes.
   }
@@ -92,7 +122,12 @@ export class Account {
   readonly auth: ApiAuthService;
   /** Moves data saved in this browser before accounts into the signed-in account. */
   readonly mover: LocalDataMover;
-  private token: string | null = readToken();
+  /** The sign-in: a provider's tokens, or a development token. */
+  private session: Tokens | null;
+  /** Set when a sign-in provider is connected (VITE_AUTH_ISSUER); otherwise the development sign-in is used. */
+  readonly provider: OidcClient | null;
+  private readonly baseUrl: string;
+  private refreshing: Promise<string | null> | null = null;
   private started = false;
   /** Known from the last time the server was asked; kept so Finken opens offline. */
   private profileValue: Profile | null = readProfile();
@@ -102,15 +137,199 @@ export class Account {
     baseUrl: string,
     cache: StorageAdapter = hasIndexedDb() ? new IndexedDbAdapter(ACCOUNT_DB) : new MemoryAdapter(),
     local: StorageAdapter = hasIndexedDb() ? new IndexedDbAdapter() : new MemoryAdapter(),
+    provider: OidcClient | null = oidcSettings ? new OidcClient(oidcSettings) : null,
   ) {
-    this.api = new ApiClient({ baseUrl, token: async () => this.token });
+    this.provider = provider;
+    // A provider's tokens are kept on the device; Finken's own access token starts empty and comes from the session cookie.
+    this.session = provider ? readSession() : null;
+    this.baseUrl = baseUrl;
+    this.api = new ApiClient({ baseUrl, token: () => this.currentToken() });
     this.storage = new SyncedStorage(this.api, cache);
     this.auth = new ApiAuthService(this.api, this.storage, (me) => this.setProfile(me));
     this.mover = new LocalDataMover(local, this.api);
   }
 
   get signedIn() {
-    return Boolean(this.token);
+    return this.provider ? Boolean(this.session) : remembered();
+  }
+
+  private get token(): string | null {
+    return this.session?.idToken ?? null;
+  }
+
+  private setSession(session: Tokens | null) {
+    this.session = session;
+    // A provider's tokens are kept so the device stays signed in; Finken's own access token lives only in memory.
+    if (this.provider) writeSession(session);
+    else remember(Boolean(session));
+  }
+
+  /**
+   * The token for the next request. A provider's token is renewed shortly
+   * before it runs out; if the provider says the sign-in has ended, the
+   * person is signed out. Without a connection, the old token is used and
+   * the server's answer decides.
+   */
+  private async currentToken(): Promise<string | null> {
+    if (!this.provider) return this.finkenToken();
+    const session = this.session;
+    if (!session) return null;
+    if (!this.provider || !session.refreshToken || session.expiresAt - Date.now() > 60_000) return session.idToken;
+    this.refreshing ??= this.provider
+      .refresh(session.refreshToken)
+      .then((tokens) => {
+        this.setSession(tokens);
+        return tokens.idToken;
+      })
+      .catch((err) => {
+        if (err instanceof SignInError && /ended/.test(err.message)) {
+          this.setSession(null);
+          return null;
+        }
+        return session.idToken;
+      })
+      .finally(() => {
+        this.refreshing = null;
+      });
+    return this.refreshing;
+  }
+
+  // ── Finken's own sign-in ─────────────────────────────────────────────────
+
+  /**
+   * The access token for the next request: the one in memory while it has
+   * more than a minute left, otherwise a new one from the session cookie.
+   * If the server says the session has ended, this device is signed out.
+   * Without a connection there is none, and requests wait as they do offline.
+   */
+  private finkenToken(): Promise<string | null> {
+    const session = this.session;
+    if (session && session.expiresAt - Date.now() > 60_000) return Promise.resolve(session.idToken);
+    if (!remembered()) return Promise.resolve(null);
+    this.refreshing ??= (async () => {
+      try {
+        const res = await fetch(`${this.baseUrl}/v1/auth/refresh`, { method: 'POST', headers: { 'x-finken-session': '1' }, credentials: 'same-origin' });
+        if (res.status === 401 || res.status === 403) {
+          this.setSession(null);
+          return null;
+        }
+        if (!res.ok) return null;
+        const { accessToken, expiresAt } = (await res.json()) as { accessToken: string; expiresAt: number };
+        this.setSession({ idToken: accessToken, expiresAt });
+        return accessToken;
+      } catch {
+        return null;
+      } finally {
+        this.refreshing = null;
+      }
+    })();
+    return this.refreshing;
+  }
+
+  /** Runs a sign-in form's request; on success the device is signed in. */
+  private async form(work: () => Promise<{ accessToken: string; expiresAt: number } | undefined>): Promise<FormResult> {
+    try {
+      const signed = await work();
+      if (signed) this.setSession({ idToken: signed.accessToken, expiresAt: signed.expiresAt });
+      return { ok: true };
+    } catch (err) {
+      if (err instanceof ApiError && err.status < 500) return { ok: false, error: err.message, field: err.field };
+      return { ok: false, error: OFFLINE };
+    }
+  }
+
+  /** A new Finken account; this device is signed in. */
+  register(input: { email: string; password: string; name: string; timeZone?: string }) {
+    return this.form(() => this.api.request('POST', '/v1/auth/register', input));
+  }
+
+  logIn(email: string, password: string) {
+    return this.form(() => this.api.request('POST', '/v1/auth/login', { email, password }));
+  }
+
+  /** Emails a link to set a new password. The answer is the same whether or not the email has an account. */
+  forgotPassword(email: string) {
+    return this.form(async () => {
+      await this.api.request('POST', '/v1/auth/forgot', { email });
+      return undefined;
+    });
+  }
+
+  /** Sets a new password from the emailed link; every device is signed out, and this one signed in. */
+  async resetPassword(token: string, password: string) {
+    const wasSignedIn = this.signedIn;
+    const result = await this.form(() => this.api.request('POST', '/v1/auth/reset', { token, password }));
+    // Only once the new password is set: whoever was signed in here before loses this device's copy,
+    // so it is never shown to this account. (Their cookie has already been replaced by the new one.)
+    if (result.ok && wasSignedIn) {
+      this.storage.stop();
+      this.started = false;
+      this.setProfile(null);
+      await this.storage.clearAll();
+    }
+    return result;
+  }
+
+  confirmEmail(token: string) {
+    return this.form(async () => {
+      await this.api.request('POST', '/v1/auth/verify', { token });
+      return undefined;
+    });
+  }
+
+  resendConfirmation() {
+    return this.form(async () => {
+      await this.api.request('POST', '/v1/auth/verify/resend', {});
+      return undefined;
+    });
+  }
+
+  /** A new password, after the current one; every other device is signed out. */
+  changePassword(current: string, password: string) {
+    return this.form(async () => {
+      await this.api.request('POST', '/v1/auth/password', { current, password });
+      return undefined;
+    });
+  }
+
+  /** Signs out every device but this one. */
+  async signOutOthers(): Promise<{ ok: true; ended: number } | { ok: false; error: string }> {
+    try {
+      return { ok: true, ended: (await this.api.request<{ ended: number }>('POST', '/v1/auth/logout-others', {})).ended };
+    } catch (err) {
+      return { ok: false, error: failure(err, OFFLINE) };
+    }
+  }
+
+  /** Development servers only: the emails Finken would have sent to this address. */
+  async developmentMail(to: string): Promise<{ subject: string; link: string }[]> {
+    try {
+      return (await this.api.request<{ emails: { subject: string; link: string }[] }>('GET', `/v1/dev/mail?to=${encodeURIComponent(to.trim().toLowerCase())}`)).emails;
+    } catch {
+      return [];
+    }
+  }
+
+  /** Sends the person to the provider's sign-in (or sign-up) page. */
+  async startSignIn(options: { signUp?: boolean } = {}): Promise<{ ok: false; error: string } | undefined> {
+    if (!this.provider) return { ok: false, error: 'Signing in is not set up for this app yet.' };
+    try {
+      window.location.assign(await this.provider.signInUrl(options));
+      return undefined;
+    } catch (err) {
+      return { ok: false, error: err instanceof SignInError ? err.message : 'The sign-in page could not be opened. Try again.' };
+    }
+  }
+
+  /** Back from the provider's page: keeps the sign-in. */
+  async finishSignIn(callbackUrl: string): Promise<{ ok: true } | { ok: false; error: string }> {
+    if (!this.provider) return { ok: false, error: 'Signing in is not set up for this app yet.' };
+    try {
+      this.setSession(await this.provider.finishSignIn(callbackUrl));
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err instanceof SignInError ? err.message : 'Signing in did not finish. Try again.' };
+    }
   }
 
   get profile(): Profile | null {
@@ -129,8 +348,8 @@ export class Account {
     };
   };
 
-  private setProfile(me: Pick<Me, 'access' | 'usage'> | null) {
-    const next: Profile | null = me ? { access: me.access ?? 'member', usage: me.usage ?? null } : null;
+  private setProfile(me: Pick<Me, 'access' | 'usage' | 'signIn' | 'emailVerified'> | null) {
+    const next: Profile | null = me ? { access: me.access ?? 'member', usage: me.usage ?? null, signIn: me.signIn, emailVerified: me.emailVerified } : null;
     if (JSON.stringify(next) === JSON.stringify(this.profileValue)) return;
     this.profileValue = next;
     writeProfile(next);
@@ -216,42 +435,32 @@ export class Account {
     }
   }
 
-  /**
-   * Development sign-in: any email, no password. Works only against a
-   * development server; on a real one this answers that sign-in is not ready.
-   */
-  async signIn(email: string, name: string): Promise<{ ok: true } | { ok: false; error: string }> {
-    const subject = email.trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(subject)) return { ok: false, error: 'Enter a valid email address.' };
-    try {
-      const { token } = await this.api.request<{ token: string }>('POST', '/v1/dev/token', { subject, email: subject, ...(name.trim() ? { name: name.trim() } : {}) });
-      this.token = token;
-      writeToken(token);
-      return { ok: true };
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 404) return { ok: false, error: 'Signing in is not available on this server yet.' };
-      if (err instanceof ApiError && err.status < 500) return { ok: false, error: err.message };
-      return { ok: false, error: 'Finken could not reach its server. Check your connection and try again.' };
-    }
-  }
-
   /** Starts syncing once someone is signed in. Safe to call repeatedly. */
   start() {
     // Until an invite code is entered, nothing syncs: the server would refuse it.
-    if (this.started || !this.token || this.needsInvite) return;
+    if (this.started || !this.signedIn || this.needsInvite) return;
     this.started = true;
     this.storage.start();
     this.reportErrors();
   }
 
-  /** Signs out and forgets this device's copy, so the next person starts clean. The account keeps everything. */
-  async signOut() {
+  /**
+   * Signs out and forgets this device's copy, so the next person starts
+   * clean. The account keeps everything. Returns the provider's sign-out
+   * page, if it has one, so its own session can end too.
+   */
+  async signOut(): Promise<string | null> {
+    const idToken = this.token;
     this.storage.stop();
     this.started = false;
-    this.token = null;
-    writeToken(null);
+    // Finken's own sign-in: end the session on the server, which also clears the cookie.
+    if (!this.provider && remembered()) {
+      await fetch(`${this.baseUrl}/v1/auth/logout`, { method: 'POST', headers: { 'x-finken-session': '1' }, credentials: 'same-origin' }).catch(() => {});
+    }
+    this.setSession(null);
     this.setProfile(null);
     await this.storage.clearAll();
+    return this.provider ? await this.provider.signOutUrl(idToken) : null;
   }
 
   /** Everything in the account, as the JSON file the server prepares. */
@@ -275,7 +484,7 @@ export class Account {
     if (typeof window === 'undefined') return;
     let sent = 0;
     const send = (message: unknown) => {
-      if (!this.token || sent >= 5) return;
+      if (!this.signedIn || sent >= 5) return;
       sent++;
       const text = String(message instanceof Error ? `${message.name}: ${message.message}` : message).slice(0, 500);
       void this.api.request('POST', '/v1/client-errors', { message: text || 'Unknown error', where: window.location.pathname.slice(0, 200) }).catch(() => {});

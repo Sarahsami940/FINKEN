@@ -31,6 +31,8 @@ export class ApiError extends Error {
     readonly status: number,
     /** The record the server's answer is about, when it names one. */
     readonly where?: { collection?: string; id?: string },
+    /** The form field the answer is about (sign-in forms). */
+    readonly field?: string,
   ) {
     super(message);
   }
@@ -47,8 +49,8 @@ export class ApiClient {
       headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
-    const data = (await res.json().catch(() => ({}))) as { error?: string; collection?: string; id?: string };
-    if (!res.ok) throw new ApiError(data.error ?? 'Finken could not reach its server.', res.status, { collection: data.collection, id: data.id });
+    const data = (await res.json().catch(() => ({}))) as { error?: string; collection?: string; id?: string; field?: string };
+    if (!res.ok) throw new ApiError(data.error ?? 'Finken could not reach its server.', res.status, { collection: data.collection, id: data.id }, data.field);
     return data as T;
   }
 }
@@ -162,6 +164,9 @@ export interface Me {
   access?: 'member' | 'invite-needed';
   /** Whether usage may be counted; null until asked. */
   usage?: 'yes' | 'no' | null;
+  /** How this person signs in: a Finken password, an outside provider, or the development sign-in. */
+  signIn?: 'password' | 'provider' | 'development';
+  emailVerified?: boolean;
 }
 
 const toUser = (me: Me): User => ({ id: me.id, name: me.name, email: me.email ?? undefined, isGuest: false, timeZone: me.timeZone });

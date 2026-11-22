@@ -4,9 +4,25 @@ The API keeps every user's records in PostgreSQL and checks every save with the 
 
 ## Sign-in
 
+**Finken's own sign-in** (`AUTH_MODE=password`, the default for real servers; [SIGN-IN.md](SIGN-IN.md)):
+
+| Method and path | What it does |
+| --- | --- |
+| `POST /v1/auth/register` | `{"email", "password", "name"?, "timeZone"?}`: a new account, signed in. Answers `{accessToken, expiresAt}` and sets the session cookie. `409` if the email has an account; `400` with `field` for a weak password or a bad email. |
+| `POST /v1/auth/login` | `{"email", "password"}`: the same answer as register. A wrong email or password gets `401` with one message; after 5 in a row, `429` for 15 minutes. |
+| `POST /v1/auth/refresh` | With the session cookie and `X-Finken-Session: 1`: a new access token, and a new cookie. |
+| `POST /v1/auth/logout` | With the cookie and the header: ends this device's session. |
+| `POST /v1/auth/forgot` | `{"email"}`: always `202`. Real accounts are emailed a link to set a new password. |
+| `POST /v1/auth/reset` | `{"token", "password"}`: sets the password from the emailed link, signs out every device and signs this one in. |
+| `POST /v1/auth/verify` | `{"token"}`: confirms the email from the emailed link. |
+| `POST /v1/auth/password` | Signed in, `{"current", "password"}`: a new password; every other device is signed out. |
+| `POST /v1/auth/logout-others` | Signed in: ends every other session. Answers `{ended}`. |
+| `POST /v1/auth/verify/resend` | Signed in: sends the confirmation link again. |
+| `GET /v1/dev/mail?to=` | Development servers only: the emails that would have been sent. |
+
 Every request under `/v1` needs `Authorization: Bearer <token>`. Without a valid token the answer is `401 {"error": "Sign in again."}`. Too many requests get `429` with `Retry-After` ([SECURITY.md](SECURITY.md)). Every answer has an `X-Request-Id`; a server failure answers `500 {"error": "Something went wrong. Try again.", "requestId"}`, and the details are in the log under that id.
 
-- **`AUTH_MODE=oidc`** (staging and production): tokens come from the sign-in provider. The API checks the signature against the provider's published keys (`AUTH_JWKS_URL`), and the issuer, audience and expiry (`AUTH_ISSUER`, `AUTH_AUDIENCE`). Supabase, Clerk, Auth0 and other standard providers all work this way, so choosing one is a settings change.
+- **`AUTH_MODE=oidc`** (staging and production): tokens come from the sign-in provider. The API checks the signature against the provider's published keys (`AUTH_JWKS_URL`), and the issuer, audience and expiry (`AUTH_ISSUER`, `AUTH_AUDIENCE`). Any OpenID Connect provider works this way (Auth0, Okta, Microsoft Entra ID, AWS Cognito, Keycloak, Zitadel), so connecting one is a settings change. The token is the provider's ID token, made out to the web app's client id ([SIGN-IN.md](SIGN-IN.md)).
 - **`AUTH_MODE=dev`** (development and tests only): the API signs its own tokens with `AUTH_DEV_SECRET`, and `POST /v1/dev/token {"subject", "email"?, "name"?}` returns one. The API refuses to start in this mode when `NODE_ENV` is `staging` or `production`.
 
 A user record is created the first time a new provider identity calls the API. The provider's subject is the link; Finken's own user id is separate.
@@ -137,7 +153,7 @@ A Space can be shared: a business with staff and an accountant, or a family. Eac
 
 ## Not done yet
 
-- Choosing the sign-in provider, and the sign-in screens in the web app (`ApiAuthService` is ready for the provider's token).
+- Choosing the sign-in provider. The web app's sign-in through it is built and tested against a stand-in ([SIGN-IN.md](SIGN-IN.md)).
 - Turning account mode on for real users: it needs the provider's sign-in. Until then account mode (`VITE_API_URL`) signs in with a development-only sign-in that a staging or production API refuses.
 - Sync state is shown in Settings only; there is no indicator elsewhere on screen yet.
 - Rate-limit counts are kept per API process; move them to a shared store before running several instances ([SECURITY.md](SECURITY.md)).
